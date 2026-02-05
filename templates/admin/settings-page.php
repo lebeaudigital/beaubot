@@ -186,6 +186,57 @@ if (!defined('ABSPATH')) {
         <?php submit_button(__('Enregistrer les modifications', 'beaubot')); ?>
     </form>
 
+    <!-- Section Indexation -->
+    <div class="beaubot-card">
+        <h2><?php esc_html_e('Indexation du Contenu', 'beaubot'); ?></h2>
+        <p class="description"><?php esc_html_e('Le chatbot utilise un index du contenu de votre site pour répondre aux questions. Régénérez l\'index après avoir modifié vos pages.', 'beaubot'); ?></p>
+        
+        <?php
+        $indexer = new BeauBot_Content_Indexer();
+        $stats = $indexer->get_index_stats();
+        ?>
+        
+        <table class="form-table">
+            <tr>
+                <th scope="row"><?php esc_html_e('Statut de l\'index', 'beaubot'); ?></th>
+                <td>
+                    <div id="beaubot-index-status">
+                        <?php if ($stats['exists']): ?>
+                            <span class="beaubot-status beaubot-status-success">
+                                <?php esc_html_e('Index généré', 'beaubot'); ?>
+                            </span>
+                            <ul style="margin-top: 10px; color: #666;">
+                                <li><strong><?php esc_html_e('Contenus indexés:', 'beaubot'); ?></strong> <?php echo esc_html($stats['count']); ?></li>
+                                <li><strong><?php esc_html_e('Taille:', 'beaubot'); ?></strong> <?php echo esc_html($stats['size']); ?> Ko</li>
+                                <li><strong><?php esc_html_e('Dernière génération:', 'beaubot'); ?></strong> <?php echo esc_html($stats['generated_at']); ?></li>
+                            </ul>
+                        <?php else: ?>
+                            <span class="beaubot-status beaubot-status-warning">
+                                <?php esc_html_e('Index non généré', 'beaubot'); ?>
+                            </span>
+                            <p style="color: #b45309; margin-top: 10px;">
+                                <?php esc_html_e('Cliquez sur "Régénérer l\'index" pour indexer le contenu de votre site.', 'beaubot'); ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Actions', 'beaubot'); ?></th>
+                <td>
+                    <button type="button" class="button button-primary" id="beaubot-reindex">
+                        <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
+                        <?php esc_html_e('Régénérer l\'index', 'beaubot'); ?>
+                    </button>
+                    <span id="beaubot-reindex-status" style="margin-left: 10px;"></span>
+                    <p class="description" style="margin-top: 10px;">
+                        <?php esc_html_e('L\'index se met à jour automatiquement quand vous modifiez une page, mais vous pouvez le forcer ici.', 'beaubot'); ?>
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
     <div class="beaubot-admin-footer">
         <p>
             BeauBot v<?php echo esc_html(BEAUBOT_VERSION); ?> | 

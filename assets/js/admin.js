@@ -23,6 +23,9 @@
 
             // Confirmation de suppression
             $('.beaubot-delete-conversation').on('click', this.confirmDelete);
+
+            // Régénérer l'index
+            $('#beaubot-reindex').on('click', this.reindexContent);
         },
 
         /**
@@ -89,6 +92,53 @@
             if (!confirm(beaubotAdmin.strings?.confirmDelete || 'Êtes-vous sûr ?')) {
                 e.preventDefault();
             }
+        },
+
+        /**
+         * Régénérer l'index du contenu
+         */
+        reindexContent() {
+            const button = $(this);
+            const status = $('#beaubot-reindex-status');
+            const originalHtml = button.html();
+            
+            button.prop('disabled', true).html('<span class="dashicons dashicons-update spinning"></span> Indexation en cours...');
+            status.html('<span style="color: #666;">Veuillez patienter...</span>');
+
+            $.ajax({
+                url: beaubotAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'beaubot_reindex',
+                    nonce: beaubotAdmin.nonce
+                },
+                success(response) {
+                    if (response.success) {
+                        status.html('<span style="color: #059669;">' + response.data.message + '</span>');
+                        BeauBotAdmin.showNotice('success', 'Index régénéré avec succès !');
+                        
+                        // Mettre à jour l'affichage des stats
+                        $('#beaubot-index-status').html(`
+                            <span class="beaubot-status beaubot-status-success">Index généré</span>
+                            <ul style="margin-top: 10px; color: #666;">
+                                <li><strong>Contenus indexés:</strong> ${response.data.count}</li>
+                                <li><strong>Taille:</strong> ${response.data.size} Ko</li>
+                                <li><strong>Généré en:</strong> ${response.data.duration}s</li>
+                            </ul>
+                        `);
+                    } else {
+                        status.html('<span style="color: #dc2626;">' + (response.data?.message || 'Erreur') + '</span>');
+                        BeauBotAdmin.showNotice('error', response.data?.message || 'Erreur lors de l\'indexation');
+                    }
+                },
+                error() {
+                    status.html('<span style="color: #dc2626;">Erreur de connexion</span>');
+                    BeauBotAdmin.showNotice('error', 'Erreur de connexion au serveur');
+                },
+                complete() {
+                    button.prop('disabled', false).html(originalHtml);
+                }
+            });
         },
 
         /**

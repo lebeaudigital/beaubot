@@ -313,6 +313,21 @@
     color: var(--beaubot-text);
 }
 
+/* Spinning animation */
+@keyframes beaubot-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.dashicons.spinning {
+    animation: beaubot-spin 1s linear infinite;
+    display: inline-block;
+}
+
+#beaubot-reindex .dashicons {
+    vertical-align: middle;
+}
+
 /* Footer */
 .beaubot-admin-footer {
     margin-top: 40px;

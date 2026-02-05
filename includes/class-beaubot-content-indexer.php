@@ -2,7 +2,7 @@
 /**
  * Classe d'indexation du contenu BeauBot
  * 
- * Récupère et formate le contenu des pages et articles pour le contexte ChatGPT.
+ * Génère et maintient un fichier d'index du contenu du site pour ChatGPT.
  */
 
 if (!defined('ABSPATH')) {
@@ -12,22 +12,73 @@ if (!defined('ABSPATH')) {
 class BeauBot_Content_Indexer {
     
     /**
-     * Table de cache
+     * Chemin du fichier d'index
      * @var string
      */
-    private string $table_cache;
+    private string $index_file;
+
+    /**
+     * Chemin du fichier d'index JSON
+     * @var string
+     */
+    private string $index_json_file;
 
     /**
      * Nombre maximum de tokens pour le contexte
      */
-    private const MAX_CONTEXT_TOKENS = 8000;
+    private const MAX_CONTEXT_TOKENS = 12000;
+
+    /**
+     * Instance unique
+     * @var BeauBot_Content_Indexer|null
+     */
+    private static ?BeauBot_Content_Indexer $instance = null;
+
+    /**
+     * Obtenir l'instance unique
+     * @return BeauBot_Content_Indexer
+     */
+    public static function get_instance(): BeauBot_Content_Indexer {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
 
     /**
      * Constructeur
      */
     public function __construct() {
-        global $wpdb;
-        $this->table_cache = $wpdb->prefix . 'beaubot_content_cache';
+        $upload_dir = wp_upload_dir();
+        $this->index_file = $upload_dir['basedir'] . '/beaubot-index.txt';
+        $this->index_json_file = $upload_dir['basedir'] . '/beaubot-index.json';
+        
+        // Hooks pour mise à jour automatique de l'index
+        add_action('save_post', [$this, 'schedule_reindex'], 10, 2);
+        add_action('delete_post', [$this, 'schedule_reindex']);
+        add_action('beaubot_reindex_content', [$this, 'generate_index']);
+    }
+
+    /**
+     * Planifier une réindexation (avec délai pour éviter les multiples appels)
+     * @param int $post_id
+     * @param WP_Post|null $post
+     */
+    public function schedule_reindex(int $post_id, ?WP_Post $post = null): void {
+        // Ignorer les révisions et auto-drafts
+        if ($post && ($post->post_status === 'auto-draft' || $post->post_type === 'revision')) {
+            return;
+        }
+        
+        // Ignorer les conversations BeauBot
+        if ($post && $post->post_type === 'beaubot_conversation') {
+            return;
+        }
+
+        // Planifier la réindexation dans 30 secondes (évite les appels multiples)
+        if (!wp_next_scheduled('beaubot_reindex_content')) {
+            wp_schedule_single_event(time() + 30, 'beaubot_reindex_content');
+        }
     }
 
     /**
@@ -36,24 +87,181 @@ class BeauBot_Content_Indexer {
      * @return string
      */
     public function get_site_context(?string $query = null): string {
-        $context = [];
+        // Vérifier si le fichier d'index existe, sinon le générer
+        if (!file_exists($this->index_file)) {
+            $this->generate_index();
+        }
+
+        // Lire le fichier d'index
+        $context = file_get_contents($this->index_file);
         
-        // Informations générales du site
-        $context[] = $this->get_site_info();
-        
-        // TOUJOURS inclure tout le contenu pour avoir le contexte complet
-        $context[] = $this->get_all_content_summary();
-        
-        // Si une question est posée, ajouter aussi les résultats de recherche en priorité
-        if ($query) {
-            $search_results = $this->get_relevant_content($query);
-            if (!empty($search_results)) {
-                // Mettre les résultats pertinents en premier
-                array_splice($context, 1, 0, [$search_results]);
+        if (empty($context)) {
+            // Fallback si le fichier est vide
+            $context = $this->get_site_info() . "\n\n" . $this->get_all_content_live();
+        }
+
+        return $this->truncate_context($context);
+    }
+
+    /**
+     * Générer le fichier d'index complet du site
+     * @return bool
+     */
+    public function generate_index(): bool {
+        $content = [];
+        $json_data = [
+            'generated_at' => current_time('mysql'),
+            'site_info' => [],
+            'content' => [],
+        ];
+
+        // 1. Informations du site
+        $site_info = $this->get_site_info();
+        $content[] = $site_info;
+        $json_data['site_info'] = [
+            'name' => get_bloginfo('name'),
+            'description' => get_bloginfo('description'),
+            'url' => home_url(),
+        ];
+
+        // 2. Récupérer TOUT le contenu
+        $post_types = get_post_types(['public' => true], 'objects');
+        unset($post_types['attachment']);
+
+        foreach ($post_types as $post_type) {
+            $posts = get_posts([
+                'post_type' => $post_type->name,
+                'post_status' => 'publish',
+                'posts_per_page' => -1, // TOUT récupérer
+                'orderby' => 'menu_order date',
+                'order' => 'ASC',
+            ]);
+
+            if (empty($posts)) continue;
+
+            $content[] = "\n=== " . strtoupper($post_type->labels->name) . " ===\n";
+
+            foreach ($posts as $post) {
+                $formatted = $this->format_post_content($post);
+                $content[] = $formatted;
+
+                // JSON data
+                $json_data['content'][] = [
+                    'id' => $post->ID,
+                    'type' => $post->post_type,
+                    'title' => $post->post_title,
+                    'url' => get_permalink($post->ID),
+                    'content' => $this->clean_content($post->post_content),
+                    'excerpt' => wp_trim_words($this->clean_content($post->post_content), 50),
+                ];
             }
         }
 
-        return implode("\n\n", array_filter($context));
+        // 3. Sauvegarder les fichiers
+        $full_content = implode("\n", $content);
+        
+        $txt_saved = file_put_contents($this->index_file, $full_content);
+        $json_saved = file_put_contents($this->index_json_file, json_encode($json_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        // Log
+        if ($txt_saved && $json_saved) {
+            $count = count($json_data['content']);
+            error_log("[BeauBot] Index généré: {$count} contenus indexés.");
+            return true;
+        }
+
+        error_log("[BeauBot] Erreur lors de la génération de l'index.");
+        return false;
+    }
+
+    /**
+     * Obtenir le contenu live (fallback si pas d'index)
+     * @return string
+     */
+    private function get_all_content_live(): string {
+        $content = "=== CONTENU DU SITE ===\n";
+        
+        $post_types = get_post_types(['public' => true], 'objects');
+        unset($post_types['attachment']);
+
+        foreach ($post_types as $post_type) {
+            $posts = get_posts([
+                'post_type' => $post_type->name,
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+                'orderby' => 'menu_order date',
+                'order' => 'ASC',
+            ]);
+
+            if (!empty($posts)) {
+                $content .= "\n--- " . strtoupper($post_type->labels->name) . " ---\n";
+                foreach ($posts as $post) {
+                    $content .= $this->format_post_content($post);
+                }
+            }
+        }
+
+        return $content;
+    }
+
+    /**
+     * Forcer la régénération de l'index
+     * @return array
+     */
+    public function force_reindex(): array {
+        $start = microtime(true);
+        $success = $this->generate_index();
+        $duration = round(microtime(true) - $start, 2);
+
+        if ($success && file_exists($this->index_json_file)) {
+            $json = json_decode(file_get_contents($this->index_json_file), true);
+            $count = count($json['content'] ?? []);
+            $size = round(filesize($this->index_file) / 1024, 2);
+            
+            return [
+                'success' => true,
+                'message' => sprintf(
+                    __('%d contenus indexés en %ss (%s Ko)', 'beaubot'),
+                    $count,
+                    $duration,
+                    $size
+                ),
+                'count' => $count,
+                'size' => $size,
+                'duration' => $duration,
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => __('Erreur lors de la génération de l\'index.', 'beaubot'),
+        ];
+    }
+
+    /**
+     * Obtenir les statistiques de l'index
+     * @return array
+     */
+    public function get_index_stats(): array {
+        if (!file_exists($this->index_file)) {
+            return [
+                'exists' => false,
+                'message' => __('Index non généré', 'beaubot'),
+            ];
+        }
+
+        $json = [];
+        if (file_exists($this->index_json_file)) {
+            $json = json_decode(file_get_contents($this->index_json_file), true);
+        }
+
+        return [
+            'exists' => true,
+            'generated_at' => $json['generated_at'] ?? null,
+            'count' => count($json['content'] ?? []),
+            'size' => round(filesize($this->index_file) / 1024, 2),
+            'size_json' => round(filesize($this->index_json_file) / 1024, 2),
+        ];
     }
 
     /**
@@ -108,116 +316,6 @@ class BeauBot_Content_Indexer {
         return implode("\n\n", $structure);
     }
 
-    /**
-     * Obtenir le contenu pertinent pour une question
-     * @param string $query
-     * @return string
-     */
-    private function get_relevant_content(string $query): string {
-        // Récupérer tous les types de posts publics
-        $post_types = get_post_types(['public' => true], 'names');
-        unset($post_types['attachment']);
-        
-        // Recherche dans tous les types de contenu
-        $search_args = [
-            'post_type' => array_values($post_types),
-            'post_status' => 'publish',
-            's' => $query,
-            'posts_per_page' => 15,
-            'orderby' => 'relevance',
-        ];
-
-        $search_query = new WP_Query($search_args);
-        $content = "";
-        
-        if ($search_query->have_posts()) {
-            $content .= "=== RÉSULTATS DE RECHERCHE POUR: {$query} ===\n";
-            while ($search_query->have_posts()) {
-                $search_query->the_post();
-                $content .= $this->format_post_content(get_post());
-            }
-            wp_reset_postdata();
-        }
-
-        return $content;
-    }
-
-    /**
-     * Obtenir un résumé de tout le contenu
-     * @return string
-     */
-    private function get_all_content_summary(): string {
-        $content = "=== CONTENU COMPLET DU SITE ===\n";
-        
-        // Récupérer tous les types de posts publics
-        $post_types = get_post_types(['public' => true], 'objects');
-        unset($post_types['attachment']);
-        
-        foreach ($post_types as $post_type) {
-            $posts = get_posts([
-                'post_type' => $post_type->name,
-                'post_status' => 'publish',
-                'posts_per_page' => 30,
-                'orderby' => 'menu_order date',
-                'order' => 'ASC',
-            ]);
-            
-            if (!empty($posts)) {
-                $content .= "\n--- " . strtoupper($post_type->labels->name) . " ---\n";
-                foreach ($posts as $post) {
-                    $content .= $this->format_post_content($post);
-                }
-            }
-        }
-
-        return $content;
-    }
-
-    /**
-     * Obtenir le contenu des pages principales
-     * @return string
-     */
-    private function get_main_pages_content(): string {
-        $args = [
-            'post_type' => 'page',
-            'post_status' => 'publish',
-            'posts_per_page' => 20,
-            'orderby' => 'menu_order date',
-            'order' => 'ASC',
-        ];
-
-        $pages = get_posts($args);
-        $content = '';
-
-        foreach ($pages as $page) {
-            $content .= $this->format_post_content($page);
-        }
-
-        return $content;
-    }
-
-    /**
-     * Obtenir le contenu des articles récents
-     * @return string
-     */
-    private function get_recent_posts_content(): string {
-        $args = [
-            'post_type' => 'post',
-            'post_status' => 'publish',
-            'posts_per_page' => 10,
-            'orderby' => 'date',
-            'order' => 'DESC',
-        ];
-
-        $posts = get_posts($args);
-        $content = '';
-
-        foreach ($posts as $post) {
-            $content .= $this->format_post_content($post);
-        }
-
-        return $content;
-    }
 
     /**
      * Formater le contenu d'un post

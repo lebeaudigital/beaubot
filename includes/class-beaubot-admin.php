@@ -53,6 +53,9 @@ class BeauBot_Admin {
         
         // AJAX pour tester l'API
         add_action('wp_ajax_beaubot_test_api', [$this, 'ajax_test_api']);
+        
+        // AJAX pour régénérer l'index
+        add_action('wp_ajax_beaubot_reindex', [$this, 'ajax_reindex']);
     }
 
     /**
@@ -91,6 +94,26 @@ class BeauBot_Admin {
             $body = json_decode(wp_remote_retrieve_body($response), true);
             $error_message = $body['error']['message'] ?? __('Erreur de connexion', 'beaubot');
             wp_send_json_error(['message' => $error_message]);
+        }
+    }
+
+    /**
+     * Régénérer l'index du contenu via AJAX
+     */
+    public function ajax_reindex(): void {
+        check_ajax_referer('beaubot_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Accès non autorisé.', 'beaubot')]);
+        }
+        
+        $indexer = new BeauBot_Content_Indexer();
+        $result = $indexer->force_reindex();
+        
+        if ($result['success']) {
+            wp_send_json_success($result);
+        } else {
+            wp_send_json_error($result);
         }
     }
 
