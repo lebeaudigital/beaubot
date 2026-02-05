@@ -1,0 +1,357 @@
+/**
+ * BeauBot Admin Styles
+ * Styles pour la page de paramètres admin
+ */
+
+/* Variables */
+:root {
+    --beaubot-primary: #6366f1;
+    --beaubot-primary-dark: #4f46e5;
+    --beaubot-secondary: #64748b;
+    --beaubot-success: #10b981;
+    --beaubot-error: #ef4444;
+    --beaubot-warning: #f59e0b;
+    --beaubot-border: #e2e8f0;
+    --beaubot-bg: #f8fafc;
+    --beaubot-text: #1e293b;
+    --beaubot-text-muted: #64748b;
+}
+
+/* Page Container */
+.beaubot-admin-wrap {
+    max-width: 900px;
+    margin: 20px 20px 20px 0;
+}
+
+.beaubot-admin-wrap h1 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--beaubot-text);
+}
+
+.beaubot-admin-wrap h1 .dashicons {
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
+    color: var(--beaubot-primary);
+}
+
+/* Cards */
+.beaubot-card {
+    background: #fff;
+    border: 1px solid var(--beaubot-border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.beaubot-card h2 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--beaubot-text);
+}
+
+.beaubot-card p.description {
+    margin: 0 0 20px 0;
+    color: var(--beaubot-text-muted);
+}
+
+/* Form Table Override */
+.beaubot-admin-wrap .form-table {
+    margin-top: 0;
+}
+
+.beaubot-admin-wrap .form-table th {
+    padding: 15px 10px 15px 0;
+    font-weight: 500;
+    color: var(--beaubot-text);
+}
+
+.beaubot-admin-wrap .form-table td {
+    padding: 15px 10px;
+}
+
+.beaubot-admin-wrap .form-table td p.description {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--beaubot-text-muted);
+}
+
+/* Input Styles */
+.beaubot-admin-wrap input[type="text"],
+.beaubot-admin-wrap input[type="password"],
+.beaubot-admin-wrap input[type="number"],
+.beaubot-admin-wrap select,
+.beaubot-admin-wrap textarea {
+    border: 1px solid var(--beaubot-border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.beaubot-admin-wrap input[type="text"]:focus,
+.beaubot-admin-wrap input[type="password"]:focus,
+.beaubot-admin-wrap input[type="number"]:focus,
+.beaubot-admin-wrap select:focus,
+.beaubot-admin-wrap textarea:focus {
+    border-color: var(--beaubot-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    outline: none;
+}
+
+.beaubot-admin-wrap textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* Buttons */
+.beaubot-admin-wrap .button {
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.beaubot-admin-wrap .button-primary {
+    background: var(--beaubot-primary);
+    border-color: var(--beaubot-primary);
+}
+
+.beaubot-admin-wrap .button-primary:hover,
+.beaubot-admin-wrap .button-primary:focus {
+    background: var(--beaubot-primary-dark);
+    border-color: var(--beaubot-primary-dark);
+}
+
+/* API Key Field */
+.beaubot-api-field {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.beaubot-api-field input {
+    flex: 1;
+    min-width: 300px;
+}
+
+/* Radio Buttons */
+.beaubot-radio-group {
+    display: flex;
+    gap: 24px;
+}
+
+.beaubot-radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.beaubot-radio-group input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--beaubot-primary);
+}
+
+/* Range Slider */
+.beaubot-range-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.beaubot-range {
+    width: 200px;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--beaubot-border);
+    border-radius: 3px;
+    outline: none;
+}
+
+.beaubot-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--beaubot-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.beaubot-range::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.beaubot-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: var(--beaubot-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+#beaubot_temperature_value {
+    min-width: 40px;
+    font-weight: 600;
+    color: var(--beaubot-primary);
+}
+
+/* Notices */
+.beaubot-notice {
+    border-left-width: 4px;
+    padding: 12px 16px;
+    margin: 15px 0;
+}
+
+.beaubot-notice.notice-success {
+    border-left-color: var(--beaubot-success);
+}
+
+.beaubot-notice.notice-error {
+    border-left-color: var(--beaubot-error);
+}
+
+/* Status Badge */
+.beaubot-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.beaubot-status-success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--beaubot-success);
+}
+
+.beaubot-status-error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--beaubot-error);
+}
+
+.beaubot-status-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--beaubot-warning);
+}
+
+/* Conversations Page */
+.beaubot-conversations-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.beaubot-conversations-table th,
+.beaubot-conversations-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--beaubot-border);
+}
+
+.beaubot-conversations-table th {
+    background: var(--beaubot-bg);
+    font-weight: 600;
+    color: var(--beaubot-text);
+}
+
+.beaubot-conversations-table tr:hover {
+    background: var(--beaubot-bg);
+}
+
+.beaubot-conversation-title {
+    font-weight: 500;
+    color: var(--beaubot-text);
+}
+
+.beaubot-conversation-meta {
+    font-size: 13px;
+    color: var(--beaubot-text-muted);
+}
+
+.beaubot-conversation-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.beaubot-conversation-actions .button {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* Empty State */
+.beaubot-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--beaubot-text-muted);
+}
+
+.beaubot-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.beaubot-empty-state h3 {
+    margin: 0 0 8px 0;
+    color: var(--beaubot-text);
+}
+
+/* Footer */
+.beaubot-admin-footer {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--beaubot-border);
+    text-align: center;
+    color: var(--beaubot-text-muted);
+    font-size: 13px;
+}
+
+.beaubot-admin-footer a {
+    color: var(--beaubot-primary);
+    text-decoration: none;
+}
+
+.beaubot-admin-footer a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media screen and (max-width: 782px) {
+    .beaubot-admin-wrap {
+        margin: 10px;
+    }
+
+    .beaubot-card {
+        padding: 16px;
+    }
+
+    .beaubot-api-field {
+        flex-direction: column;
+    }
+
+    .beaubot-api-field input {
+        min-width: 100%;
+    }
+
+    .beaubot-radio-group {
+        flex-direction: column;
+        gap: 12px;
+    }
+}

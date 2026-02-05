@@ -1,0 +1,876 @@
+/**
+ * BeauBot Frontend Styles
+ * Interface du chatbot style sidebar Copilot
+ */
+
+/* Variables CSS */
+:root {
+    --beaubot-primary: #6366f1;
+    --beaubot-primary-dark: #4f46e5;
+    --beaubot-primary-light: #818cf8;
+    --beaubot-secondary: #64748b;
+    --beaubot-success: #10b981;
+    --beaubot-error: #ef4444;
+    --beaubot-warning: #f59e0b;
+    
+    --beaubot-bg: #ffffff;
+    --beaubot-bg-secondary: #f8fafc;
+    --beaubot-bg-tertiary: #f1f5f9;
+    --beaubot-border: #e2e8f0;
+    --beaubot-text: #1e293b;
+    --beaubot-text-secondary: #64748b;
+    --beaubot-text-muted: #94a3b8;
+    
+    --beaubot-user-bg: #6366f1;
+    --beaubot-user-text: #ffffff;
+    --beaubot-assistant-bg: #f1f5f9;
+    --beaubot-assistant-text: #1e293b;
+    
+    --beaubot-sidebar-width: 400px;
+    --beaubot-sidebar-width-mobile: 100%;
+    --beaubot-header-height: 60px;
+    --beaubot-input-height: 80px;
+    
+    --beaubot-radius: 12px;
+    --beaubot-radius-sm: 8px;
+    --beaubot-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    --beaubot-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    
+    --beaubot-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reset pour le plugin */
+#beaubot-sidebar *,
+#beaubot-sidebar *::before,
+#beaubot-sidebar *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* ========================================
+   Toggle Button
+   ======================================== */
+
+#beaubot-toggle {
+    position: fixed;
+    bottom: 24px;
+    z-index: 99998;
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 50%;
+    background: var(--beaubot-primary);
+    color: white;
+    cursor: pointer;
+    box-shadow: var(--beaubot-shadow-lg);
+    transition: var(--beaubot-transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#beaubot-toggle.beaubot-right {
+    right: 24px;
+}
+
+#beaubot-toggle.beaubot-left {
+    left: 24px;
+}
+
+#beaubot-toggle:hover {
+    background: var(--beaubot-primary-dark);
+    transform: scale(1.05);
+}
+
+#beaubot-toggle.beaubot-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+}
+
+#beaubot-toggle svg {
+    width: 28px;
+    height: 28px;
+}
+
+/* Pulse animation */
+#beaubot-toggle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--beaubot-primary);
+    animation: beaubot-pulse 2s infinite;
+    z-index: -1;
+}
+
+@keyframes beaubot-pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* ========================================
+   Overlay
+   ======================================== */
+
+#beaubot-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99998;
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--beaubot-transition);
+}
+
+#beaubot-overlay.beaubot-visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+@media (min-width: 768px) {
+    #beaubot-overlay {
+        display: none;
+    }
+}
+
+/* ========================================
+   Sidebar Container
+   ======================================== */
+
+#beaubot-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: var(--beaubot-sidebar-width);
+    max-width: 100vw;
+    background: var(--beaubot-bg);
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--beaubot-shadow-lg);
+    transform: translateX(100%);
+    transition: transform var(--beaubot-transition);
+}
+
+#beaubot-sidebar.beaubot-right {
+    right: 0;
+    transform: translateX(100%);
+    border-left: 1px solid var(--beaubot-border);
+}
+
+#beaubot-sidebar.beaubot-left {
+    left: 0;
+    transform: translateX(-100%);
+    border-right: 1px solid var(--beaubot-border);
+}
+
+#beaubot-sidebar.beaubot-open {
+    transform: translateX(0);
+}
+
+/* Mobile */
+@media (max-width: 767px) {
+    #beaubot-sidebar {
+        width: var(--beaubot-sidebar-width-mobile);
+    }
+}
+
+/* ========================================
+   Header
+   ======================================== */
+
+.beaubot-header {
+    height: var(--beaubot-header-height);
+    min-height: var(--beaubot-header-height);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--beaubot-border);
+    background: var(--beaubot-bg);
+}
+
+.beaubot-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.beaubot-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--beaubot-primary) 0%, var(--beaubot-primary-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.beaubot-logo svg {
+    width: 20px;
+    height: 20px;
+}
+
+.beaubot-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--beaubot-text);
+}
+
+.beaubot-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.beaubot-header-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--beaubot-radius-sm);
+    background: transparent;
+    color: var(--beaubot-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--beaubot-transition);
+}
+
+.beaubot-header-btn:hover {
+    background: var(--beaubot-bg-tertiary);
+    color: var(--beaubot-text);
+}
+
+.beaubot-header-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* ========================================
+   Messages Container
+   ======================================== */
+
+#beaubot-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+}
+
+/* Scrollbar styling */
+#beaubot-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#beaubot-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#beaubot-messages::-webkit-scrollbar-thumb {
+    background: var(--beaubot-border);
+    border-radius: 3px;
+}
+
+#beaubot-messages::-webkit-scrollbar-thumb:hover {
+    background: var(--beaubot-text-muted);
+}
+
+/* ========================================
+   Messages
+   ======================================== */
+
+.beaubot-message {
+    display: flex;
+    gap: 12px;
+    animation: beaubot-fade-in 0.3s ease;
+}
+
+@keyframes beaubot-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.beaubot-message.beaubot-user {
+    flex-direction: row-reverse;
+}
+
+.beaubot-avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--beaubot-bg-tertiary);
+}
+
+.beaubot-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.beaubot-avatar svg {
+    width: 20px;
+    height: 20px;
+    color: var(--beaubot-primary);
+}
+
+.beaubot-message-content {
+    max-width: 85%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.beaubot-message-text {
+    padding: 12px 16px;
+    border-radius: var(--beaubot-radius);
+    line-height: 1.5;
+    font-size: 14px;
+    word-wrap: break-word;
+}
+
+.beaubot-user .beaubot-message-text {
+    background: var(--beaubot-user-bg);
+    color: var(--beaubot-user-text);
+    border-bottom-right-radius: 4px;
+}
+
+.beaubot-assistant .beaubot-message-text {
+    background: var(--beaubot-assistant-bg);
+    color: var(--beaubot-assistant-text);
+    border-bottom-left-radius: 4px;
+}
+
+/* Code dans les messages */
+.beaubot-message-text code {
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.beaubot-message-text pre {
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: var(--beaubot-radius-sm);
+    background: #1e293b;
+    overflow-x: auto;
+}
+
+.beaubot-message-text pre code {
+    padding: 0;
+    background: transparent;
+    color: #e2e8f0;
+}
+
+/* Links */
+.beaubot-message-text a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.beaubot-assistant .beaubot-message-text a {
+    color: var(--beaubot-primary);
+}
+
+/* Image dans le message */
+.beaubot-message-image {
+    max-width: 250px;
+    border-radius: var(--beaubot-radius);
+    overflow: hidden;
+}
+
+.beaubot-message-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Error message */
+.beaubot-message.beaubot-error {
+    justify-content: center;
+}
+
+.beaubot-error-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--beaubot-error);
+    border-radius: var(--beaubot-radius);
+    font-size: 14px;
+}
+
+.beaubot-error-content svg {
+    min-width: 20px;
+}
+
+/* ========================================
+   Typing Indicator
+   ======================================== */
+
+#beaubot-typing {
+    display: none;
+    padding: 0 16px 16px;
+}
+
+#beaubot-typing.beaubot-visible {
+    display: flex;
+}
+
+.beaubot-typing-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.beaubot-typing-dots {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    background: var(--beaubot-bg-tertiary);
+    border-radius: var(--beaubot-radius);
+}
+
+.beaubot-typing-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--beaubot-text-muted);
+    animation: beaubot-typing 1.4s infinite;
+}
+
+.beaubot-typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.beaubot-typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes beaubot-typing {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+    30% {
+        transform: translateY(-4px);
+        opacity: 1;
+    }
+}
+
+/* ========================================
+   Input Area
+   ======================================== */
+
+#beaubot-input-area {
+    padding: 16px;
+    border-top: 1px solid var(--beaubot-border);
+    background: var(--beaubot-bg);
+}
+
+#beaubot-input-area.beaubot-drag-over {
+    background: rgba(99, 102, 241, 0.05);
+    border-color: var(--beaubot-primary);
+}
+
+/* Image Preview */
+#beaubot-image-preview {
+    margin-bottom: 12px;
+    display: none;
+}
+
+#beaubot-image-preview.beaubot-has-image {
+    display: block;
+}
+
+.beaubot-image-preview-item {
+    position: relative;
+    display: inline-block;
+    max-width: 120px;
+}
+
+.beaubot-image-preview-item img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: var(--beaubot-radius-sm);
+    border: 2px solid var(--beaubot-border);
+}
+
+.beaubot-remove-image {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: var(--beaubot-error);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--beaubot-shadow);
+    transition: var(--beaubot-transition);
+}
+
+.beaubot-remove-image:hover {
+    transform: scale(1.1);
+}
+
+.beaubot-image-filename {
+    display: block;
+    font-size: 11px;
+    color: var(--beaubot-text-muted);
+    margin-top: 4px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Input Container */
+.beaubot-input-container {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+#beaubot-input {
+    flex: 1;
+    min-height: 44px;
+    max-height: 150px;
+    padding: 10px 14px;
+    border: 1px solid var(--beaubot-border);
+    border-radius: var(--beaubot-radius);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+    transition: var(--beaubot-transition);
+}
+
+#beaubot-input:focus {
+    border-color: var(--beaubot-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+#beaubot-input::placeholder {
+    color: var(--beaubot-text-muted);
+}
+
+/* Input Actions */
+.beaubot-input-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.beaubot-input-btn {
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: var(--beaubot-radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--beaubot-transition);
+}
+
+#beaubot-upload-btn {
+    background: var(--beaubot-bg-tertiary);
+    color: var(--beaubot-text-secondary);
+}
+
+#beaubot-upload-btn:hover {
+    background: var(--beaubot-bg-secondary);
+    color: var(--beaubot-text);
+}
+
+#beaubot-send {
+    background: var(--beaubot-primary);
+    color: white;
+}
+
+#beaubot-send:hover:not(:disabled) {
+    background: var(--beaubot-primary-dark);
+}
+
+#beaubot-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.beaubot-input-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Hidden file input */
+#beaubot-file-input {
+    display: none;
+}
+
+/* ========================================
+   History Panel
+   ======================================== */
+
+#beaubot-history-panel {
+    position: absolute;
+    top: var(--beaubot-header-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--beaubot-bg);
+    transform: translateX(-100%);
+    transition: transform var(--beaubot-transition);
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+}
+
+#beaubot-history-panel.beaubot-open {
+    transform: translateX(0);
+}
+
+.beaubot-right #beaubot-history-panel {
+    transform: translateX(100%);
+}
+
+.beaubot-right #beaubot-history-panel.beaubot-open {
+    transform: translateX(0);
+}
+
+.beaubot-history-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--beaubot-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.beaubot-history-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--beaubot-text);
+}
+
+.beaubot-history-actions {
+    display: flex;
+    gap: 8px;
+}
+
+#beaubot-history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.beaubot-history-group {
+    margin-bottom: 16px;
+}
+
+.beaubot-history-group-title {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--beaubot-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.beaubot-history-items {
+    list-style: none;
+}
+
+.beaubot-history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-radius: var(--beaubot-radius-sm);
+    cursor: pointer;
+    transition: var(--beaubot-transition);
+}
+
+.beaubot-history-item:hover {
+    background: var(--beaubot-bg-tertiary);
+}
+
+.beaubot-history-item.beaubot-active {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.beaubot-history-title {
+    flex: 1;
+    font-size: 14px;
+    color: var(--beaubot-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 8px;
+}
+
+.beaubot-history-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: var(--beaubot-transition);
+}
+
+.beaubot-history-item:hover .beaubot-history-actions {
+    opacity: 1;
+}
+
+.beaubot-archive-btn,
+.beaubot-delete-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--beaubot-text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--beaubot-transition);
+}
+
+.beaubot-archive-btn:hover {
+    background: var(--beaubot-bg-secondary);
+    color: var(--beaubot-primary);
+}
+
+.beaubot-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--beaubot-error);
+}
+
+.beaubot-no-conversations {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--beaubot-text-muted);
+    font-size: 14px;
+}
+
+/* ========================================
+   Toast Notifications
+   ======================================== */
+
+.beaubot-toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    padding: 12px 24px;
+    border-radius: var(--beaubot-radius);
+    font-size: 14px;
+    z-index: 100000;
+    opacity: 0;
+    transition: var(--beaubot-transition);
+    pointer-events: none;
+}
+
+.beaubot-toast.beaubot-toast-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.beaubot-toast-error {
+    background: var(--beaubot-error);
+    color: white;
+    box-shadow: var(--beaubot-shadow-lg);
+}
+
+/* ========================================
+   Settings Menu
+   ======================================== */
+
+.beaubot-settings-menu {
+    position: absolute;
+    top: var(--beaubot-header-height);
+    right: 0;
+    width: 200px;
+    background: var(--beaubot-bg);
+    border: 1px solid var(--beaubot-border);
+    border-radius: var(--beaubot-radius);
+    box-shadow: var(--beaubot-shadow-lg);
+    padding: 8px;
+    z-index: 20;
+    display: none;
+}
+
+.beaubot-settings-menu.beaubot-open {
+    display: block;
+}
+
+.beaubot-settings-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--beaubot-radius-sm);
+    font-size: 14px;
+    color: var(--beaubot-text);
+    cursor: pointer;
+    transition: var(--beaubot-transition);
+}
+
+.beaubot-settings-item:hover {
+    background: var(--beaubot-bg-tertiary);
+}
+
+.beaubot-settings-item svg {
+    width: 18px;
+    height: 18px;
+    color: var(--beaubot-text-muted);
+}
+
+/* ========================================
+   Dark Mode (optional)
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+    /* Uncomment to enable auto dark mode
+    :root {
+        --beaubot-bg: #0f172a;
+        --beaubot-bg-secondary: #1e293b;
+        --beaubot-bg-tertiary: #334155;
+        --beaubot-border: #334155;
+        --beaubot-text: #f1f5f9;
+        --beaubot-text-secondary: #94a3b8;
+        --beaubot-text-muted: #64748b;
+        --beaubot-assistant-bg: #1e293b;
+        --beaubot-assistant-text: #f1f5f9;
+    }
+    */
+}

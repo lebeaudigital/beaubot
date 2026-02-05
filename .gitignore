@@ -1,0 +1,39 @@
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+vendor/
+
+# Logs
+*.log
+error_log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Build
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# WordPress uploads (local dev)
+uploads/
+
+# Cache
+*.cache
+.cache/
