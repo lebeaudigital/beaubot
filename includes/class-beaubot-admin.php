@@ -242,6 +242,8 @@ class BeauBot_Admin {
         return [
             'api_key' => '',
             'model' => 'gpt-4o',
+            'bot_name' => 'BeauBot',
+            'primary_color' => '#6366f1',
             'sidebar_position' => 'right',
             'max_tokens' => 1000,
             'temperature' => 0.7,
@@ -257,11 +259,18 @@ class BeauBot_Admin {
     public function sanitize_settings(array $input): array {
         $sanitized = [];
         
+        // API
         $sanitized['api_key'] = sanitize_text_field($input['api_key'] ?? '');
         $sanitized['model'] = sanitize_text_field($input['model'] ?? 'gpt-4o');
+        
+        // Interface
+        $sanitized['bot_name'] = sanitize_text_field($input['bot_name'] ?? 'BeauBot');
+        $sanitized['primary_color'] = sanitize_hex_color($input['primary_color'] ?? '#6366f1') ?: '#6366f1';
         $sanitized['sidebar_position'] = in_array($input['sidebar_position'] ?? '', ['left', 'right']) 
             ? $input['sidebar_position'] 
             : 'right';
+        
+        // Paramètres avancés
         $sanitized['max_tokens'] = absint($input['max_tokens'] ?? 1000);
         $sanitized['temperature'] = floatval($input['temperature'] ?? 0.7);
         $sanitized['system_prompt'] = sanitize_textarea_field($input['system_prompt'] ?? '');
