@@ -182,19 +182,27 @@ class BeauBot_Content_Indexer {
                 $content[] = $formatted;
                 $total_posts++;
 
+                // Obtenir la hiérarchie (parent, grand-parent, etc.)
+                $hierarchy = $this->get_page_hierarchy($post);
+                $parent_title = $hierarchy['parent_title'];
+                $breadcrumb = $hierarchy['breadcrumb'];
+                
                 // JSON data
                 $clean_content = $this->clean_content($post->post_content);
                 $json_data['content'][] = [
                     'id' => $post->ID,
                     'type' => $post->post_type,
                     'title' => $post->post_title,
+                    'parent_id' => $post->post_parent,
+                    'parent_title' => $parent_title,
+                    'breadcrumb' => $breadcrumb, // Ex: "Génétique > Races > Large White"
                     'url' => get_permalink($post->ID),
                     'content' => $clean_content,
-                    'excerpt' => wp_trim_words($clean_content, 50),
                 ];
                 
                 // Log chaque post pour debug
-                error_log("[BeauBot Indexer] Indexed: [{$post->post_type}] {$post->post_title} (ID: {$post->ID})");
+                $hierarchy_str = $breadcrumb ? " (dans: {$breadcrumb})" : "";
+                error_log("[BeauBot Indexer] Indexed: [{$post->post_type}] {$post->post_title}{$hierarchy_str} (ID: {$post->ID})");
             }
         }
         
@@ -366,6 +374,65 @@ class BeauBot_Content_Indexer {
 
 
     /**
+     * Obtenir la hiérarchie d'une page (parent, grand-parent, etc.)
+     * @param WP_Post $post
+     * @return array
+     */
+    private function get_page_hierarchy(WP_Post $post): array {
+        $hierarchy = [
+            'parent_id' => 0,
+            'parent_title' => '',
+            'breadcrumb' => '',
+            'ancestors' => [],
+        ];
+        
+        // Si pas de parent, retourner vide
+        if (!$post->post_parent) {
+            return $hierarchy;
+        }
+        
+        // Obtenir tous les ancêtres (du plus proche au plus lointain)
+        $ancestors = get_post_ancestors($post->ID);
+        
+        if (empty($ancestors)) {
+            return $hierarchy;
+        }
+        
+        // Parent direct
+        $parent = get_post($post->post_parent);
+        if ($parent) {
+            $hierarchy['parent_id'] = $parent->ID;
+            $hierarchy['parent_title'] = $parent->post_title;
+        }
+        
+        // Construire le breadcrumb (du plus haut au plus bas)
+        $breadcrumb_parts = [];
+        $ancestors_data = [];
+        
+        // Inverser pour avoir du plus haut niveau au plus bas
+        $ancestors = array_reverse($ancestors);
+        
+        foreach ($ancestors as $ancestor_id) {
+            $ancestor = get_post($ancestor_id);
+            if ($ancestor) {
+                $breadcrumb_parts[] = $ancestor->post_title;
+                $ancestors_data[] = [
+                    'id' => $ancestor->ID,
+                    'title' => $ancestor->post_title,
+                ];
+            }
+        }
+        
+        // Ajouter la page courante à la fin du breadcrumb
+        $breadcrumb_parts[] = $post->post_title;
+        
+        $hierarchy['breadcrumb'] = implode(' > ', $breadcrumb_parts);
+        $hierarchy['ancestors'] = $ancestors_data;
+        
+        return $hierarchy;
+    }
+
+    /**
      * Formater le contenu d'un post
      * @param WP_Post $post
      * @return string
@@ -374,6 +441,9 @@ class BeauBot_Content_Indexer {
         $title = $post->post_title;
         $url = get_permalink($post->ID);
         $type = $post->post_type === 'page' ? 'Page' : 'Article';
+        
+        // Obtenir la hiérarchie
+        $hierarchy = $this->get_page_hierarchy($post);
         
         // Nettoyer le contenu
         $content = $this->clean_content($post->post_content);
@@ -400,7 +470,17 @@ class BeauBot_Content_Indexer {
             }
         }
 
+        // Construire le format avec hiérarchie
         $formatted = "\n[{$type}] {$title}\n";
+        
+        // Ajouter le chemin hiérarchique si présent
+        if (!empty($hierarchy['breadcrumb'])) {
+            $formatted .= "Section: {$hierarchy['breadcrumb']}\n";
+        }
+        if (!empty($hierarchy['parent_title'])) {
+            $formatted .= "Page parente: {$hierarchy['parent_title']}\n";
+        }
+        
         $formatted .= "URL: {$url}{$meta}\n";
         $formatted .= "Contenu:\n{$content}\n";
         $formatted .= str_repeat('-', 50) . "\n";
