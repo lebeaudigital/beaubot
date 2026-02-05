@@ -117,6 +117,29 @@ class BeauBot {
     public function init(): void {
         // Enregistrer le type de post pour les conversations
         $this->register_conversation_post_type();
+        
+        // Vérifier si les tables existent, sinon les créer
+        $this->maybe_create_tables();
+    }
+    
+    /**
+     * Vérifier et créer les tables si nécessaire
+     */
+    private function maybe_create_tables(): void {
+        global $wpdb;
+        
+        // Vérifier si la table messages existe
+        $table_messages = $wpdb->prefix . 'beaubot_messages';
+        $table_exists = $wpdb->get_var($wpdb->prepare(
+            "SHOW TABLES LIKE %s",
+            $table_messages
+        ));
+        
+        if (!$table_exists) {
+            error_log("[BeauBot] Tables not found, creating them now...");
+            $this->create_tables();
+            error_log("[BeauBot] Tables created successfully.");
+        }
     }
 
     /**
