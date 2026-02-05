@@ -261,6 +261,9 @@ class BeauBot_API_Endpoints {
         $image_base64 = null;
         
         if ($image_data) {
+            error_log("[BeauBot] Image data received, length: " . strlen($image_data));
+            error_log("[BeauBot] Image data starts with: " . substr($image_data, 0, 50));
+            
             // Si c'est une URL d'image déjà uploadée
             if (filter_var($image_data, FILTER_VALIDATE_URL)) {
                 $image_url = $image_data;
@@ -271,16 +274,24 @@ class BeauBot_API_Endpoints {
                     $image_data
                 );
                 $image_base64 = $image_handler->to_base64($image_path);
+                error_log("[BeauBot] Image URL converted to base64: " . ($image_base64 ? "YES" : "NO"));
             } 
             // Si c'est du base64 directement
             elseif (strpos($image_data, 'data:image') === 0) {
+                error_log("[BeauBot] Processing base64 image directly");
                 $upload_result = $image_handler->upload_base64($image_data, $user_id);
                 if (is_wp_error($upload_result)) {
+                    error_log("[BeauBot] Image upload failed: " . $upload_result->get_error_message());
                     return $upload_result;
                 }
                 $image_url = $upload_result['url'];
                 $image_base64 = $image_data;
+                error_log("[BeauBot] Image uploaded successfully: " . $image_url);
+            } else {
+                error_log("[BeauBot] Unknown image format!");
             }
+        } else {
+            error_log("[BeauBot] No image data in request");
         }
 
         // Enregistrer le message utilisateur

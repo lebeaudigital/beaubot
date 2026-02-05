@@ -165,6 +165,7 @@ class BeauBot_API_ChatGPT {
 
             // Si c'est le dernier message utilisateur et qu'il y a une image
             if ($image_base64 && $role === 'user' && $index === count($messages) - 1) {
+                error_log("[BeauBot API] Adding image to message, base64 length: " . strlen($image_base64));
                 $api_messages[] = [
                     'role' => 'user',
                     'content' => [
