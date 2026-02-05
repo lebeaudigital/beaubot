@@ -103,19 +103,42 @@ class BeauBot_API_ChatGPT {
      * @return string
      */
     private function build_system_prompt(?string $site_context): string {
-        $base_prompt = $this->options['system_prompt'] ?? 
-            __('Tu es un assistant virtuel pour ce site web. Tu réponds aux questions en te basant sur le contenu du site.', 'beaubot');
-
-        $prompt = $base_prompt . "\n\n";
-        $prompt .= __('Instructions importantes:', 'beaubot') . "\n";
-        $prompt .= __('- Réponds de manière concise et utile.', 'beaubot') . "\n";
-        $prompt .= __('- Base tes réponses sur le contenu du site fourni.', 'beaubot') . "\n";
-        $prompt .= __('- Si tu ne connais pas la réponse, dis-le clairement.', 'beaubot') . "\n";
-        $prompt .= __('- Fournis des liens vers les pages pertinentes quand c\'est possible.', 'beaubot') . "\n";
+        $site_name = get_bloginfo('name');
+        
+        $base_prompt = $this->options['system_prompt'] ?? '';
+        
+        $prompt = "Tu es l'assistant virtuel du site \"{$site_name}\". ";
+        $prompt .= "Tu DOIS répondre UNIQUEMENT en te basant sur le contenu du site fourni ci-dessous.\n\n";
+        
+        $prompt .= "RÈGLES STRICTES:\n";
+        $prompt .= "1. Tu ne dois JAMAIS inventer d'informations. Utilise UNIQUEMENT les données fournies dans le contexte.\n";
+        $prompt .= "2. Si l'information n'est pas dans le contexte fourni, dis clairement: \"Je n'ai pas trouvé cette information dans le contenu du site.\"\n";
+        $prompt .= "3. Cite les titres des pages ou articles quand tu donnes une information.\n";
+        $prompt .= "4. Fournis les URLs des pages pertinentes.\n";
+        $prompt .= "5. Réponds en français.\n";
+        
+        if (!empty($base_prompt)) {
+            $prompt .= "\nInstructions supplémentaires du propriétaire du site:\n{$base_prompt}\n";
+        }
 
         if ($site_context) {
-            $prompt .= "\n" . __('Voici le contenu du site pour contexte:', 'beaubot') . "\n\n";
+            $prompt .= "\n" . str_repeat('=', 50) . "\n";
+            $prompt .= "CONTENU DU SITE (utilise ces informations pour répondre):\n";
+            $prompt .= str_repeat('=', 50) . "\n\n";
             $prompt .= $site_context;
+            $prompt .= "\n\n" . str_repeat('=', 50) . "\n";
+            $prompt .= "FIN DU CONTENU DU SITE\n";
+            $prompt .= str_repeat('=', 50) . "\n";
+        } else {
+            $prompt .= "\n[ATTENTION: Aucun contenu du site n'a été fourni. Indique à l'utilisateur de régénérer l'index.]\n";
+        }
+
+        // Log pour debug
+        error_log("[BeauBot] System prompt length: " . strlen($prompt) . " chars");
+        if ($site_context) {
+            error_log("[BeauBot] Site context length: " . strlen($site_context) . " chars");
+        } else {
+            error_log("[BeauBot] WARNING: No site context provided!");
         }
 
         return $prompt;

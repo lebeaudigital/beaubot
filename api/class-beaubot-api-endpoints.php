@@ -291,7 +291,17 @@ class BeauBot_API_Endpoints {
 
         // Obtenir le contexte du site
         $site_context = $indexer->get_site_context($message);
-        $site_context = $indexer->truncate_context($site_context);
+        
+        // Log pour debug
+        error_log("[BeauBot] Getting site context for message: " . substr($message, 0, 100));
+        error_log("[BeauBot] Context retrieved: " . (empty($site_context) ? "EMPTY!" : strlen($site_context) . " chars"));
+        
+        if (empty($site_context)) {
+            error_log("[BeauBot] Attempting to regenerate index...");
+            $indexer->generate_index();
+            $site_context = $indexer->get_site_context($message);
+            error_log("[BeauBot] After regeneration: " . (empty($site_context) ? "STILL EMPTY!" : strlen($site_context) . " chars"));
+        }
 
         // Envoyer à ChatGPT
         $response = $chatgpt->send_message($messages, $image_base64, $site_context);

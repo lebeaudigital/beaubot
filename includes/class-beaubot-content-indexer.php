@@ -25,8 +25,9 @@ class BeauBot_Content_Indexer {
 
     /**
      * Nombre maximum de tokens pour le contexte
+     * GPT-4o peut gérer 128k tokens, donc 20000 pour le contexte est sûr
      */
-    private const MAX_CONTEXT_TOKENS = 12000;
+    private const MAX_CONTEXT_TOKENS = 20000;
 
     /**
      * Instance unique
@@ -87,17 +88,31 @@ class BeauBot_Content_Indexer {
      * @return string
      */
     public function get_site_context(?string $query = null): string {
+        error_log("[BeauBot Indexer] get_site_context called");
+        error_log("[BeauBot Indexer] Index file path: " . $this->index_file);
+        error_log("[BeauBot Indexer] Index file exists: " . (file_exists($this->index_file) ? "YES" : "NO"));
+        
         // Vérifier si le fichier d'index existe, sinon le générer
         if (!file_exists($this->index_file)) {
-            $this->generate_index();
+            error_log("[BeauBot Indexer] Index file not found, generating...");
+            $result = $this->generate_index();
+            error_log("[BeauBot Indexer] Index generation result: " . ($result ? "SUCCESS" : "FAILED"));
         }
 
         // Lire le fichier d'index
-        $context = file_get_contents($this->index_file);
+        if (file_exists($this->index_file)) {
+            $context = file_get_contents($this->index_file);
+            error_log("[BeauBot Indexer] Index file read: " . strlen($context) . " chars");
+        } else {
+            $context = '';
+            error_log("[BeauBot Indexer] Index file STILL not found after generation!");
+        }
         
         if (empty($context)) {
             // Fallback si le fichier est vide
+            error_log("[BeauBot Indexer] Using LIVE fallback");
             $context = $this->get_site_info() . "\n\n" . $this->get_all_content_live();
+            error_log("[BeauBot Indexer] Live content: " . strlen($context) . " chars");
         }
 
         return $this->truncate_context($context);
@@ -108,6 +123,18 @@ class BeauBot_Content_Indexer {
      * @return bool
      */
     public function generate_index(): bool {
+        error_log("[BeauBot Indexer] Starting index generation...");
+        
+        // Vérifier le dossier d'upload
+        $upload_dir = wp_upload_dir();
+        if (!empty($upload_dir['error'])) {
+            error_log("[BeauBot Indexer] Upload dir error: " . $upload_dir['error']);
+            return false;
+        }
+        
+        error_log("[BeauBot Indexer] Upload basedir: " . $upload_dir['basedir']);
+        error_log("[BeauBot Indexer] Is writable: " . (is_writable($upload_dir['basedir']) ? "YES" : "NO"));
+        
         $content = [];
         $json_data = [
             'generated_at' => current_time('mysql'),
@@ -127,7 +154,10 @@ class BeauBot_Content_Indexer {
         // 2. Récupérer TOUT le contenu
         $post_types = get_post_types(['public' => true], 'objects');
         unset($post_types['attachment']);
+        
+        error_log("[BeauBot Indexer] Post types to index: " . implode(', ', array_keys($post_types)));
 
+        $total_posts = 0;
         foreach ($post_types as $post_type) {
             $posts = get_posts([
                 'post_type' => $post_type->name,
@@ -135,42 +165,60 @@ class BeauBot_Content_Indexer {
                 'posts_per_page' => -1, // TOUT récupérer
                 'orderby' => 'menu_order date',
                 'order' => 'ASC',
+                'suppress_filters' => false,
             ]);
 
-            if (empty($posts)) continue;
+            if (empty($posts)) {
+                error_log("[BeauBot Indexer] No posts found for type: " . $post_type->name);
+                continue;
+            }
+            
+            error_log("[BeauBot Indexer] Found " . count($posts) . " posts for type: " . $post_type->name);
 
             $content[] = "\n=== " . strtoupper($post_type->labels->name) . " ===\n";
 
             foreach ($posts as $post) {
                 $formatted = $this->format_post_content($post);
                 $content[] = $formatted;
+                $total_posts++;
 
                 // JSON data
+                $clean_content = $this->clean_content($post->post_content);
                 $json_data['content'][] = [
                     'id' => $post->ID,
                     'type' => $post->post_type,
                     'title' => $post->post_title,
                     'url' => get_permalink($post->ID),
-                    'content' => $this->clean_content($post->post_content),
-                    'excerpt' => wp_trim_words($this->clean_content($post->post_content), 50),
+                    'content' => $clean_content,
+                    'excerpt' => wp_trim_words($clean_content, 50),
                 ];
+                
+                // Log chaque post pour debug
+                error_log("[BeauBot Indexer] Indexed: [{$post->post_type}] {$post->post_title} (ID: {$post->ID})");
             }
         }
+        
+        error_log("[BeauBot Indexer] Total posts indexed: " . $total_posts);
 
         // 3. Sauvegarder les fichiers
         $full_content = implode("\n", $content);
+        error_log("[BeauBot Indexer] Total content length: " . strlen($full_content) . " chars");
         
-        $txt_saved = file_put_contents($this->index_file, $full_content);
-        $json_saved = file_put_contents($this->index_json_file, json_encode($json_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $txt_saved = @file_put_contents($this->index_file, $full_content);
+        $json_saved = @file_put_contents($this->index_json_file, json_encode($json_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-        // Log
-        if ($txt_saved && $json_saved) {
+        // Log résultat
+        if ($txt_saved !== false && $json_saved !== false) {
             $count = count($json_data['content']);
-            error_log("[BeauBot] Index généré: {$count} contenus indexés.");
+            error_log("[BeauBot Indexer] SUCCESS! Index generated: {$count} items, {$txt_saved} bytes written");
+            error_log("[BeauBot Indexer] TXT file: " . $this->index_file);
+            error_log("[BeauBot Indexer] JSON file: " . $this->index_json_file);
             return true;
         }
 
-        error_log("[BeauBot] Erreur lors de la génération de l'index.");
+        error_log("[BeauBot Indexer] FAILED to write index files!");
+        error_log("[BeauBot Indexer] TXT result: " . ($txt_saved === false ? "FAILED" : $txt_saved));
+        error_log("[BeauBot Indexer] JSON result: " . ($json_saved === false ? "FAILED" : $json_saved));
         return false;
     }
 

@@ -16,6 +16,8 @@
  * GitHub Branch: main
  */
 
+ // https://github.com/lebeaudigital/beaubot/archive/refs/heads/main.zip
+
 // Empêcher l'accès direct
 if (!defined('ABSPATH')) {
     exit;
