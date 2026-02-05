@@ -41,11 +41,16 @@ class BeauBot_Content_Indexer {
         // Informations générales du site
         $context[] = $this->get_site_info();
         
-        // Contenu pertinent
+        // TOUJOURS inclure tout le contenu pour avoir le contexte complet
+        $context[] = $this->get_all_content_summary();
+        
+        // Si une question est posée, ajouter aussi les résultats de recherche en priorité
         if ($query) {
-            $context[] = $this->get_relevant_content($query);
-        } else {
-            $context[] = $this->get_all_content_summary();
+            $search_results = $this->get_relevant_content($query);
+            if (!empty($search_results)) {
+                // Mettre les résultats pertinents en premier
+                array_splice($context, 1, 0, [$search_results]);
+            }
         }
 
         return implode("\n\n", array_filter($context));
@@ -109,29 +114,29 @@ class BeauBot_Content_Indexer {
      * @return string
      */
     private function get_relevant_content(string $query): string {
-        // Recherche dans les posts et pages
+        // Récupérer tous les types de posts publics
+        $post_types = get_post_types(['public' => true], 'names');
+        unset($post_types['attachment']);
+        
+        // Recherche dans tous les types de contenu
         $search_args = [
-            'post_type' => ['post', 'page'],
+            'post_type' => array_values($post_types),
             'post_status' => 'publish',
             's' => $query,
-            'posts_per_page' => 10,
+            'posts_per_page' => 15,
             'orderby' => 'relevance',
         ];
 
         $search_query = new WP_Query($search_args);
-        $content = "=== CONTENU PERTINENT ===\n";
+        $content = "";
         
         if ($search_query->have_posts()) {
+            $content .= "=== RÉSULTATS DE RECHERCHE POUR: {$query} ===\n";
             while ($search_query->have_posts()) {
                 $search_query->the_post();
                 $content .= $this->format_post_content(get_post());
             }
             wp_reset_postdata();
-        }
-
-        // Si pas de résultats de recherche, prendre les pages principales
-        if (!$search_query->have_posts() || $search_query->post_count < 3) {
-            $content .= $this->get_main_pages_content();
         }
 
         return $content;
@@ -142,15 +147,28 @@ class BeauBot_Content_Indexer {
      * @return string
      */
     private function get_all_content_summary(): string {
-        $content = "=== RÉSUMÉ DU CONTENU ===\n";
+        $content = "=== CONTENU COMPLET DU SITE ===\n";
         
-        // Pages principales
-        $content .= "\n--- PAGES ---\n";
-        $content .= $this->get_main_pages_content();
+        // Récupérer tous les types de posts publics
+        $post_types = get_post_types(['public' => true], 'objects');
+        unset($post_types['attachment']);
         
-        // Articles récents
-        $content .= "\n--- ARTICLES RÉCENTS ---\n";
-        $content .= $this->get_recent_posts_content();
+        foreach ($post_types as $post_type) {
+            $posts = get_posts([
+                'post_type' => $post_type->name,
+                'post_status' => 'publish',
+                'posts_per_page' => 30,
+                'orderby' => 'menu_order date',
+                'order' => 'ASC',
+            ]);
+            
+            if (!empty($posts)) {
+                $content .= "\n--- " . strtoupper($post_type->labels->name) . " ---\n";
+                foreach ($posts as $post) {
+                    $content .= $this->format_post_content($post);
+                }
+            }
+        }
 
         return $content;
     }
