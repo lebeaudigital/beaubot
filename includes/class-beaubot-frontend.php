@@ -89,28 +89,8 @@ class BeauBot_Frontend {
             true
         );
 
-        // Ajouter type="module" aux scripts
-        add_filter('script_loader_tag', [$this, 'add_module_type'], 10, 3);
-
         // Variables JS
         wp_localize_script('beaubot-chatbot', 'beaubotConfig', $this->get_js_config());
-    }
-
-    /**
-     * Ajouter type="module" aux scripts BeauBot
-     * @param string $tag
-     * @param string $handle
-     * @param string $src
-     * @return string
-     */
-    public function add_module_type(string $tag, string $handle, string $src): string {
-        $module_scripts = ['beaubot-sidebar', 'beaubot-file-upload', 'beaubot-conversation', 'beaubot-chatbot'];
-        
-        if (in_array($handle, $module_scripts)) {
-            return str_replace(' src', ' type="module" src', $tag);
-        }
-        
-        return $tag;
     }
 
     /**

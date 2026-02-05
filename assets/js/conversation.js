@@ -3,8 +3,10 @@
  * Gère l'historique et la navigation entre les conversations
  */
 
-export class BeauBotConversation {
-    constructor(config) {
+(function() {
+    'use strict';
+
+    window.BeauBotConversation = function(config) {
         this.config = config;
         this.currentConversationId = null;
         this.conversations = [];
@@ -12,56 +14,50 @@ export class BeauBotConversation {
         this.isHistoryOpen = false;
         
         this.init();
-    }
+    };
 
-    /**
-     * Initialiser le module
-     */
-    init() {
+    BeauBotConversation.prototype.init = function() {
         this.createElements();
         this.bindEvents();
-    }
+    };
 
-    /**
-     * Créer/récupérer les éléments DOM
-     */
-    createElements() {
+    BeauBotConversation.prototype.createElements = function() {
         this.historyPanel = document.getElementById('beaubot-history-panel');
         this.historyList = document.getElementById('beaubot-history-list');
         this.historyToggle = document.getElementById('beaubot-history-toggle');
         this.newConversationBtn = document.getElementById('beaubot-new-conversation');
         this.archivedToggle = document.getElementById('beaubot-archived-toggle');
-    }
+    };
 
-    /**
-     * Lier les événements
-     */
-    bindEvents() {
-        // Toggle history panel
+    BeauBotConversation.prototype.bindEvents = function() {
+        var self = this;
+
         if (this.historyToggle) {
-            this.historyToggle.addEventListener('click', () => this.toggleHistory());
+            this.historyToggle.addEventListener('click', function() {
+                self.toggleHistory();
+            });
         }
 
-        // Nouvelle conversation
         if (this.newConversationBtn) {
-            this.newConversationBtn.addEventListener('click', () => this.createNew());
+            this.newConversationBtn.addEventListener('click', function() {
+                self.createNew();
+            });
         }
 
-        // Toggle archived
         if (this.archivedToggle) {
-            this.archivedToggle.addEventListener('click', () => this.toggleArchived());
+            this.archivedToggle.addEventListener('click', function() {
+                self.toggleArchived();
+            });
         }
 
-        // Click sur une conversation dans la liste
         if (this.historyList) {
-            this.historyList.addEventListener('click', (e) => this.handleHistoryClick(e));
+            this.historyList.addEventListener('click', function(e) {
+                self.handleHistoryClick(e);
+            });
         }
-    }
+    };
 
-    /**
-     * Toggle le panneau d'historique
-     */
-    toggleHistory() {
+    BeauBotConversation.prototype.toggleHistory = function() {
         this.isHistoryOpen = !this.isHistoryOpen;
         
         if (this.historyPanel) {
@@ -71,126 +67,99 @@ export class BeauBotConversation {
         if (this.isHistoryOpen) {
             this.loadConversations();
         }
-    }
+    };
 
-    /**
-     * Toggle les conversations archivées
-     */
-    async toggleArchived() {
-        const showArchived = this.archivedToggle?.classList.toggle('beaubot-active');
-        await this.loadConversations(showArchived);
-    }
+    BeauBotConversation.prototype.toggleArchived = function() {
+        var showArchived = this.archivedToggle ? this.archivedToggle.classList.toggle('beaubot-active') : false;
+        this.loadConversations(showArchived);
+    };
 
-    /**
-     * Charger les conversations
-     * @param {boolean} archived
-     */
-    async loadConversations(archived = false) {
-        try {
-            const response = await fetch(
-                `${this.config.restUrl}conversations?archived=${archived}`,
-                {
-                    headers: {
-                        'X-WP-Nonce': this.config.nonce,
-                    },
-                }
-            );
+    BeauBotConversation.prototype.loadConversations = function(archived) {
+        var self = this;
+        archived = archived || false;
 
+        fetch(this.config.restUrl + 'conversations?archived=' + archived, {
+            headers: {
+                'X-WP-Nonce': this.config.nonce,
+            },
+        })
+        .then(function(response) {
             if (!response.ok) throw new Error('Failed to load conversations');
-
-            const data = await response.json();
-            this.conversations = data.conversations || [];
-            this.renderConversations();
-        } catch (error) {
+            return response.json();
+        })
+        .then(function(data) {
+            self.conversations = data.conversations || [];
+            self.renderConversations();
+        })
+        .catch(function(error) {
             console.error('BeauBot: Error loading conversations', error);
-            this.showError(this.config.strings.error);
-        }
-    }
+            self.showError(self.config.strings.error);
+        });
+    };
 
-    /**
-     * Afficher les conversations
-     */
-    renderConversations() {
+    BeauBotConversation.prototype.renderConversations = function() {
         if (!this.historyList) return;
 
         if (this.conversations.length === 0) {
-            this.historyList.innerHTML = `
-                <div class="beaubot-no-conversations">
-                    ${this.config.strings.noConversations}
-                </div>
-            `;
+            this.historyList.innerHTML = '<div class="beaubot-no-conversations">' + this.config.strings.noConversations + '</div>';
             return;
         }
 
-        // Grouper par date
-        const grouped = this.groupByDate(this.conversations);
-        let html = '';
+        var grouped = this.groupByDate(this.conversations);
+        var html = '';
 
-        for (const [group, items] of Object.entries(grouped)) {
+        for (var group in grouped) {
+            if (!grouped.hasOwnProperty(group)) continue;
+            var items = grouped[group];
             if (items.length === 0) continue;
             
-            html += `<div class="beaubot-history-group">
-                <div class="beaubot-history-group-title">${group}</div>
-                <ul class="beaubot-history-items">`;
+            html += '<div class="beaubot-history-group">' +
+                '<div class="beaubot-history-group-title">' + group + '</div>' +
+                '<ul class="beaubot-history-items">';
 
-            for (const conv of items) {
-                const isActive = conv.id === this.currentConversationId;
-                html += `
-                    <li class="beaubot-history-item ${isActive ? 'beaubot-active' : ''}" 
-                        data-id="${conv.id}">
-                        <span class="beaubot-history-title">${this.escapeHtml(conv.title)}</span>
-                        <div class="beaubot-history-actions">
-                            <button class="beaubot-archive-btn" 
-                                    data-action="archive" 
-                                    data-id="${conv.id}"
-                                    title="${conv.archived ? 'Désarchiver' : this.config.strings.archive}">
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor" d="${conv.archived 
-                                        ? 'M20.55 5.22l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.15.55L3.46 5.22C3.17 5.57 3 6.01 3 6.5V19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.49-.17-.93-.45-1.28zM12 9.5l5.5 5.5H14v2h-4v-2H6.5L12 9.5zM5.12 5l.82-1h12l.93 1H5.12z'
-                                        : 'M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z'}"/>
-                                </svg>
-                            </button>
-                            <button class="beaubot-delete-btn" 
-                                    data-action="delete" 
-                                    data-id="${conv.id}"
-                                    title="${this.config.strings.delete}">
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </li>
-                `;
+            for (var i = 0; i < items.length; i++) {
+                var conv = items[i];
+                var isActive = conv.id === this.currentConversationId;
+                var archiveIcon = conv.archived 
+                    ? 'M20.55 5.22l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.15.55L3.46 5.22C3.17 5.57 3 6.01 3 6.5V19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.49-.17-.93-.45-1.28zM12 9.5l5.5 5.5H14v2h-4v-2H6.5L12 9.5zM5.12 5l.82-1h12l.93 1H5.12z'
+                    : 'M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z';
+
+                html += '<li class="beaubot-history-item ' + (isActive ? 'beaubot-active' : '') + '" data-id="' + conv.id + '">' +
+                    '<span class="beaubot-history-title">' + this.escapeHtml(conv.title) + '</span>' +
+                    '<div class="beaubot-history-actions">' +
+                        '<button class="beaubot-archive-btn" data-action="archive" data-id="' + conv.id + '" title="' + (conv.archived ? 'Désarchiver' : this.config.strings.archive) + '">' +
+                            '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="' + archiveIcon + '"/></svg>' +
+                        '</button>' +
+                        '<button class="beaubot-delete-btn" data-action="delete" data-id="' + conv.id + '" title="' + this.config.strings.delete + '">' +
+                            '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+                        '</button>' +
+                    '</div>' +
+                '</li>';
             }
 
             html += '</ul></div>';
         }
 
         this.historyList.innerHTML = html;
-    }
+    };
 
-    /**
-     * Grouper les conversations par date
-     * @param {array} conversations
-     * @returns {object}
-     */
-    groupByDate(conversations) {
-        const groups = {
-            [this.config.strings.today]: [],
-            [this.config.strings.yesterday]: [],
-            [this.config.strings.thisWeek]: [],
-            [this.config.strings.older]: [],
-        };
+    BeauBotConversation.prototype.groupByDate = function(conversations) {
+        var groups = {};
+        groups[this.config.strings.today] = [];
+        groups[this.config.strings.yesterday] = [];
+        groups[this.config.strings.thisWeek] = [];
+        groups[this.config.strings.older] = [];
 
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const yesterday = new Date(today);
+        var now = new Date();
+        var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        var yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        const weekAgo = new Date(today);
+        var weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
 
-        for (const conv of conversations) {
-            const date = new Date(conv.updated_at);
+        for (var i = 0; i < conversations.length; i++) {
+            var conv = conversations[i];
+            var date = new Date(conv.updated_at);
             
             if (date >= today) {
                 groups[this.config.strings.today].push(conv);
@@ -204,20 +173,16 @@ export class BeauBotConversation {
         }
 
         return groups;
-    }
+    };
 
-    /**
-     * Gérer le click sur l'historique
-     * @param {Event} e
-     */
-    handleHistoryClick(e) {
-        const item = e.target.closest('.beaubot-history-item');
-        const actionBtn = e.target.closest('[data-action]');
+    BeauBotConversation.prototype.handleHistoryClick = function(e) {
+        var item = e.target.closest('.beaubot-history-item');
+        var actionBtn = e.target.closest('[data-action]');
 
         if (actionBtn) {
             e.stopPropagation();
-            const action = actionBtn.dataset.action;
-            const id = parseInt(actionBtn.dataset.id);
+            var action = actionBtn.dataset.action;
+            var id = parseInt(actionBtn.dataset.id);
 
             if (action === 'delete') {
                 this.deleteConversation(id);
@@ -228,197 +193,148 @@ export class BeauBotConversation {
         }
 
         if (item) {
-            const id = parseInt(item.dataset.id);
+            var id = parseInt(item.dataset.id);
             this.loadConversation(id);
         }
-    }
+    };
 
-    /**
-     * Créer une nouvelle conversation
-     */
-    async createNew() {
+    BeauBotConversation.prototype.createNew = function() {
         this.currentConversationId = null;
         this.dispatchEvent('newConversation');
         
-        // Fermer l'historique
         if (this.isHistoryOpen) {
             this.toggleHistory();
         }
-    }
+    };
 
-    /**
-     * Charger une conversation
-     * @param {number} id
-     */
-    async loadConversation(id) {
-        try {
-            const response = await fetch(
-                `${this.config.restUrl}conversations/${id}`,
-                {
-                    headers: {
-                        'X-WP-Nonce': this.config.nonce,
-                    },
-                }
-            );
+    BeauBotConversation.prototype.loadConversation = function(id) {
+        var self = this;
 
+        fetch(this.config.restUrl + 'conversations/' + id, {
+            headers: {
+                'X-WP-Nonce': this.config.nonce,
+            },
+        })
+        .then(function(response) {
             if (!response.ok) throw new Error('Failed to load conversation');
-
-            const data = await response.json();
-            this.currentConversationId = id;
+            return response.json();
+        })
+        .then(function(data) {
+            self.currentConversationId = id;
+            self.dispatchEvent('conversationLoaded', { conversation: data.conversation });
+            self.updateActiveItem(id);
             
-            this.dispatchEvent('conversationLoaded', { 
-                conversation: data.conversation 
-            });
-
-            // Mettre à jour l'UI
-            this.updateActiveItem(id);
-            
-            // Fermer l'historique sur mobile
-            if (window.innerWidth < 768 && this.isHistoryOpen) {
-                this.toggleHistory();
+            if (window.innerWidth < 768 && self.isHistoryOpen) {
+                self.toggleHistory();
             }
-        } catch (error) {
+        })
+        .catch(function(error) {
             console.error('BeauBot: Error loading conversation', error);
-            this.showError(this.config.strings.error);
+            self.showError(self.config.strings.error);
+        });
+    };
+
+    BeauBotConversation.prototype.archiveConversation = function(id) {
+        var self = this;
+        var conv = null;
+        
+        for (var i = 0; i < this.conversations.length; i++) {
+            if (this.conversations[i].id === id) {
+                conv = this.conversations[i];
+                break;
+            }
         }
-    }
+        
+        var newArchived = conv ? !conv.archived : true;
 
-    /**
-     * Archiver/Désarchiver une conversation
-     * @param {number} id
-     */
-    async archiveConversation(id) {
-        try {
-            const conv = this.conversations.find(c => c.id === id);
-            const newArchived = !conv?.archived;
-
-            const response = await fetch(
-                `${this.config.restUrl}conversations/${id}`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-WP-Nonce': this.config.nonce,
-                    },
-                    body: JSON.stringify({ archived: newArchived }),
-                }
-            );
-
+        fetch(this.config.restUrl + 'conversations/' + id, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-WP-Nonce': this.config.nonce,
+            },
+            body: JSON.stringify({ archived: newArchived }),
+        })
+        .then(function(response) {
             if (!response.ok) throw new Error('Failed to archive conversation');
-
-            // Recharger la liste
-            await this.loadConversations(this.archivedToggle?.classList.contains('beaubot-active'));
-            
-            this.dispatchEvent('conversationArchived', { id, archived: newArchived });
-        } catch (error) {
+            var showArchived = self.archivedToggle ? self.archivedToggle.classList.contains('beaubot-active') : false;
+            self.loadConversations(showArchived);
+            self.dispatchEvent('conversationArchived', { id: id, archived: newArchived });
+        })
+        .catch(function(error) {
             console.error('BeauBot: Error archiving conversation', error);
-            this.showError(this.config.strings.error);
-        }
-    }
+            self.showError(self.config.strings.error);
+        });
+    };
 
-    /**
-     * Supprimer une conversation
-     * @param {number} id
-     */
-    async deleteConversation(id) {
+    BeauBotConversation.prototype.deleteConversation = function(id) {
+        var self = this;
+
         if (!confirm(this.config.strings.confirmDelete)) {
             return;
         }
 
-        try {
-            const response = await fetch(
-                `${this.config.restUrl}conversations/${id}`,
-                {
-                    method: 'DELETE',
-                    headers: {
-                        'X-WP-Nonce': this.config.nonce,
-                    },
-                }
-            );
-
+        fetch(this.config.restUrl + 'conversations/' + id, {
+            method: 'DELETE',
+            headers: {
+                'X-WP-Nonce': this.config.nonce,
+            },
+        })
+        .then(function(response) {
             if (!response.ok) throw new Error('Failed to delete conversation');
-
-            // Si c'est la conversation actuelle, créer une nouvelle
-            if (id === this.currentConversationId) {
-                this.createNew();
-            }
-
-            // Recharger la liste
-            await this.loadConversations(this.archivedToggle?.classList.contains('beaubot-active'));
             
-            this.dispatchEvent('conversationDeleted', { id });
-        } catch (error) {
+            if (id === self.currentConversationId) {
+                self.createNew();
+            }
+            
+            var showArchived = self.archivedToggle ? self.archivedToggle.classList.contains('beaubot-active') : false;
+            self.loadConversations(showArchived);
+            self.dispatchEvent('conversationDeleted', { id: id });
+        })
+        .catch(function(error) {
             console.error('BeauBot: Error deleting conversation', error);
-            this.showError(this.config.strings.error);
-        }
-    }
+            self.showError(self.config.strings.error);
+        });
+    };
 
-    /**
-     * Mettre à jour l'item actif
-     * @param {number} id
-     */
-    updateActiveItem(id) {
+    BeauBotConversation.prototype.updateActiveItem = function(id) {
         if (!this.historyList) return;
 
-        // Retirer l'ancienne sélection
-        this.historyList.querySelectorAll('.beaubot-active').forEach(el => {
-            el.classList.remove('beaubot-active');
-        });
+        var activeItems = this.historyList.querySelectorAll('.beaubot-active');
+        for (var i = 0; i < activeItems.length; i++) {
+            activeItems[i].classList.remove('beaubot-active');
+        }
 
-        // Ajouter la nouvelle
-        const item = this.historyList.querySelector(`[data-id="${id}"]`);
-        item?.classList.add('beaubot-active');
-    }
+        var item = this.historyList.querySelector('[data-id="' + id + '"]');
+        if (item) item.classList.add('beaubot-active');
+    };
 
-    /**
-     * Obtenir l'ID de la conversation courante
-     * @returns {number|null}
-     */
-    getCurrentId() {
+    BeauBotConversation.prototype.getCurrentId = function() {
         return this.currentConversationId;
-    }
+    };
 
-    /**
-     * Définir l'ID de la conversation courante
-     * @param {number|null} id
-     */
-    setCurrentId(id) {
+    BeauBotConversation.prototype.setCurrentId = function(id) {
         this.currentConversationId = id;
         if (id) {
             this.updateActiveItem(id);
         }
-    }
+    };
 
-    /**
-     * Échapper le HTML
-     * @param {string} text
-     * @returns {string}
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
+    BeauBotConversation.prototype.escapeHtml = function(text) {
+        var div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
-    }
+    };
 
-    /**
-     * Afficher une erreur
-     * @param {string} message
-     */
-    showError(message) {
-        this.dispatchEvent('error', { message });
-    }
+    BeauBotConversation.prototype.showError = function(message) {
+        this.dispatchEvent('error', { message: message });
+    };
 
-    /**
-     * Dispatch un événement personnalisé
-     * @param {string} name
-     * @param {object} detail
-     */
-    dispatchEvent(name, detail = {}) {
-        const event = new CustomEvent(`beaubot:${name}`, {
-            detail: { conversation: this, ...detail },
+    BeauBotConversation.prototype.dispatchEvent = function(name, detail) {
+        var event = new CustomEvent('beaubot:' + name, {
+            detail: Object.assign({ conversation: this }, detail || {}),
         });
         document.dispatchEvent(event);
-    }
-}
+    };
 
-export default BeauBotConversation;
+})();

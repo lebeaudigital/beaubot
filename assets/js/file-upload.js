@@ -3,8 +3,10 @@
  * Gère l'upload et l'affichage des images
  */
 
-export class BeauBotFileUpload {
-    constructor(config) {
+(function() {
+    'use strict';
+
+    window.BeauBotFileUpload = function(config) {
         this.config = config;
         this.currentImage = null;
         this.fileInput = null;
@@ -12,237 +14,183 @@ export class BeauBotFileUpload {
         this.dropZone = null;
         
         this.init();
-    }
+    };
 
-    /**
-     * Initialiser le module
-     */
-    init() {
+    BeauBotFileUpload.prototype.init = function() {
         this.createElements();
         this.bindEvents();
-    }
+    };
 
-    /**
-     * Créer/récupérer les éléments DOM
-     */
-    createElements() {
+    BeauBotFileUpload.prototype.createElements = function() {
         this.fileInput = document.getElementById('beaubot-file-input');
         this.previewContainer = document.getElementById('beaubot-image-preview');
         this.dropZone = document.getElementById('beaubot-input-area');
         this.uploadButton = document.getElementById('beaubot-upload-btn');
-    }
+    };
 
-    /**
-     * Lier les événements
-     */
-    bindEvents() {
-        // Click sur le bouton upload
+    BeauBotFileUpload.prototype.bindEvents = function() {
+        var self = this;
+
         if (this.uploadButton) {
-            this.uploadButton.addEventListener('click', () => this.triggerFileSelect());
+            this.uploadButton.addEventListener('click', function() {
+                self.triggerFileSelect();
+            });
         }
 
-        // Changement de fichier
         if (this.fileInput) {
-            this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+            this.fileInput.addEventListener('change', function(e) {
+                self.handleFileSelect(e);
+            });
         }
 
-        // Drag & Drop
         if (this.dropZone) {
-            this.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
-            this.dropZone.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-            this.dropZone.addEventListener('drop', (e) => this.handleDrop(e));
+            this.dropZone.addEventListener('dragover', function(e) {
+                self.handleDragOver(e);
+            });
+            this.dropZone.addEventListener('dragleave', function(e) {
+                self.handleDragLeave(e);
+            });
+            this.dropZone.addEventListener('drop', function(e) {
+                self.handleDrop(e);
+            });
         }
 
-        // Paste (Ctrl+V)
-        document.addEventListener('paste', (e) => this.handlePaste(e));
+        document.addEventListener('paste', function(e) {
+            self.handlePaste(e);
+        });
 
-        // Supprimer l'image preview
         if (this.previewContainer) {
-            this.previewContainer.addEventListener('click', (e) => {
+            this.previewContainer.addEventListener('click', function(e) {
                 if (e.target.classList.contains('beaubot-remove-image')) {
-                    this.removeImage();
+                    self.removeImage();
                 }
             });
         }
-    }
+    };
 
-    /**
-     * Ouvrir le sélecteur de fichiers
-     */
-    triggerFileSelect() {
-        this.fileInput?.click();
-    }
+    BeauBotFileUpload.prototype.triggerFileSelect = function() {
+        if (this.fileInput) this.fileInput.click();
+    };
 
-    /**
-     * Gérer la sélection de fichier
-     * @param {Event} e
-     */
-    handleFileSelect(e) {
-        const file = e.target.files?.[0];
+    BeauBotFileUpload.prototype.handleFileSelect = function(e) {
+        var file = e.target.files ? e.target.files[0] : null;
         if (file) {
             this.processFile(file);
         }
-    }
+    };
 
-    /**
-     * Gérer le drag over
-     * @param {DragEvent} e
-     */
-    handleDragOver(e) {
+    BeauBotFileUpload.prototype.handleDragOver = function(e) {
         e.preventDefault();
         e.stopPropagation();
-        this.dropZone?.classList.add('beaubot-drag-over');
-    }
+        if (this.dropZone) this.dropZone.classList.add('beaubot-drag-over');
+    };
 
-    /**
-     * Gérer le drag leave
-     * @param {DragEvent} e
-     */
-    handleDragLeave(e) {
+    BeauBotFileUpload.prototype.handleDragLeave = function(e) {
         e.preventDefault();
         e.stopPropagation();
-        this.dropZone?.classList.remove('beaubot-drag-over');
-    }
+        if (this.dropZone) this.dropZone.classList.remove('beaubot-drag-over');
+    };
 
-    /**
-     * Gérer le drop
-     * @param {DragEvent} e
-     */
-    handleDrop(e) {
+    BeauBotFileUpload.prototype.handleDrop = function(e) {
         e.preventDefault();
         e.stopPropagation();
-        this.dropZone?.classList.remove('beaubot-drag-over');
+        if (this.dropZone) this.dropZone.classList.remove('beaubot-drag-over');
 
-        const file = e.dataTransfer?.files?.[0];
+        var file = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files[0] : null;
         if (file) {
             this.processFile(file);
         }
-    }
+    };
 
-    /**
-     * Gérer le paste
-     * @param {ClipboardEvent} e
-     */
-    handlePaste(e) {
-        // Vérifier si le focus est dans la zone de chat
-        const activeElement = document.activeElement;
-        const isChatInput = activeElement?.classList.contains('beaubot-input');
+    BeauBotFileUpload.prototype.handlePaste = function(e) {
+        var activeElement = document.activeElement;
+        var isChatInput = activeElement && activeElement.classList.contains('beaubot-input');
         
         if (!isChatInput) return;
 
-        const items = e.clipboardData?.items;
+        var items = e.clipboardData ? e.clipboardData.items : null;
         if (!items) return;
 
-        for (const item of items) {
-            if (item.type.startsWith('image/')) {
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image/') === 0) {
                 e.preventDefault();
-                const file = item.getAsFile();
+                var file = items[i].getAsFile();
                 if (file) {
                     this.processFile(file);
                 }
                 break;
             }
         }
-    }
+    };
 
-    /**
-     * Traiter un fichier
-     * @param {File} file
-     */
-    async processFile(file) {
-        // Valider le type
-        if (!this.config.allowedMimeTypes.includes(file.type)) {
+    BeauBotFileUpload.prototype.processFile = function(file) {
+        var self = this;
+
+        if (this.config.allowedMimeTypes.indexOf(file.type) === -1) {
             this.showError(this.config.strings.invalidFileType);
             return;
         }
 
-        // Valider la taille
         if (file.size > this.config.maxFileSize) {
             this.showError(this.config.strings.fileTooLarge);
             return;
         }
 
-        // Convertir en base64
-        try {
-            const base64 = await this.fileToBase64(file);
-            this.setImage(base64, file.name);
-        } catch (error) {
-            this.showError(this.config.strings.error);
+        this.fileToBase64(file).then(function(base64) {
+            self.setImage(base64, file.name);
+        }).catch(function(error) {
+            self.showError(self.config.strings.error);
             console.error('BeauBot: File processing error', error);
-        }
-    }
+        });
+    };
 
-    /**
-     * Convertir un fichier en base64
-     * @param {File} file
-     * @returns {Promise<string>}
-     */
-    fileToBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
+    BeauBotFileUpload.prototype.fileToBase64 = function(file) {
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function() { resolve(reader.result); };
             reader.onerror = reject;
             reader.readAsDataURL(file);
         });
-    }
+    };
 
-    /**
-     * Définir l'image actuelle
-     * @param {string} base64
-     * @param {string} filename
-     */
-    setImage(base64, filename = 'image') {
+    BeauBotFileUpload.prototype.setImage = function(base64, filename) {
         this.currentImage = {
             data: base64,
-            filename: filename,
+            filename: filename || 'image',
         };
 
         this.showPreview(base64, filename);
         this.dispatchEvent('imageSelected', { image: this.currentImage });
-    }
+    };
 
-    /**
-     * Afficher la preview
-     * @param {string} base64
-     * @param {string} filename
-     */
-    showPreview(base64, filename) {
+    BeauBotFileUpload.prototype.showPreview = function(base64, filename) {
         if (!this.previewContainer) return;
 
-        this.previewContainer.innerHTML = `
-            <div class="beaubot-image-preview-item">
-                <img src="${base64}" alt="${filename}">
-                <button type="button" class="beaubot-remove-image" aria-label="Supprimer">
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                        <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                    </svg>
-                </button>
-                <span class="beaubot-image-filename">${this.truncateFilename(filename)}</span>
-            </div>
-        `;
+        this.previewContainer.innerHTML = 
+            '<div class="beaubot-image-preview-item">' +
+                '<img src="' + base64 + '" alt="' + filename + '">' +
+                '<button type="button" class="beaubot-remove-image" aria-label="Supprimer">' +
+                    '<svg viewBox="0 0 24 24" width="16" height="16">' +
+                        '<path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>' +
+                    '</svg>' +
+                '</button>' +
+                '<span class="beaubot-image-filename">' + this.truncateFilename(filename) + '</span>' +
+            '</div>';
         this.previewContainer.classList.add('beaubot-has-image');
-    }
+    };
 
-    /**
-     * Tronquer le nom de fichier
-     * @param {string} filename
-     * @param {number} maxLength
-     * @returns {string}
-     */
-    truncateFilename(filename, maxLength = 20) {
+    BeauBotFileUpload.prototype.truncateFilename = function(filename, maxLength) {
+        maxLength = maxLength || 20;
         if (filename.length <= maxLength) return filename;
         
-        const ext = filename.split('.').pop();
-        const name = filename.slice(0, -(ext.length + 1));
-        const truncatedName = name.slice(0, maxLength - ext.length - 4) + '...';
+        var ext = filename.split('.').pop();
+        var name = filename.slice(0, -(ext.length + 1));
+        var truncatedName = name.slice(0, maxLength - ext.length - 4) + '...';
         
-        return `${truncatedName}.${ext}`;
-    }
+        return truncatedName + '.' + ext;
+    };
 
-    /**
-     * Supprimer l'image
-     */
-    removeImage() {
+    BeauBotFileUpload.prototype.removeImage = function() {
         this.currentImage = null;
         
         if (this.previewContainer) {
@@ -255,66 +203,43 @@ export class BeauBotFileUpload {
         }
 
         this.dispatchEvent('imageRemoved');
-    }
+    };
 
-    /**
-     * Obtenir l'image actuelle
-     * @returns {object|null}
-     */
-    getImage() {
+    BeauBotFileUpload.prototype.getImage = function() {
         return this.currentImage;
-    }
+    };
 
-    /**
-     * Obtenir les données base64 de l'image
-     * @returns {string|null}
-     */
-    getImageData() {
-        return this.currentImage?.data || null;
-    }
+    BeauBotFileUpload.prototype.getImageData = function() {
+        return this.currentImage ? this.currentImage.data : null;
+    };
 
-    /**
-     * Vérifier si une image est sélectionnée
-     * @returns {boolean}
-     */
-    hasImage() {
+    BeauBotFileUpload.prototype.hasImage = function() {
         return this.currentImage !== null;
-    }
+    };
 
-    /**
-     * Afficher une erreur
-     * @param {string} message
-     */
-    showError(message) {
-        this.dispatchEvent('error', { message });
+    BeauBotFileUpload.prototype.showError = function(message) {
+        this.dispatchEvent('error', { message: message });
         
-        // Toast notification simple
-        const toast = document.createElement('div');
+        var toast = document.createElement('div');
         toast.className = 'beaubot-toast beaubot-toast-error';
         toast.textContent = message;
         document.body.appendChild(toast);
 
-        setTimeout(() => {
+        setTimeout(function() {
             toast.classList.add('beaubot-toast-visible');
         }, 10);
 
-        setTimeout(() => {
+        setTimeout(function() {
             toast.classList.remove('beaubot-toast-visible');
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(function() { toast.remove(); }, 300);
         }, 3000);
-    }
+    };
 
-    /**
-     * Dispatch un événement personnalisé
-     * @param {string} name
-     * @param {object} detail
-     */
-    dispatchEvent(name, detail = {}) {
-        const event = new CustomEvent(`beaubot:${name}`, {
-            detail: { fileUpload: this, ...detail },
+    BeauBotFileUpload.prototype.dispatchEvent = function(name, detail) {
+        var event = new CustomEvent('beaubot:' + name, {
+            detail: Object.assign({ fileUpload: this }, detail || {}),
         });
         document.dispatchEvent(event);
-    }
-}
+    };
 
-export default BeauBotFileUpload;
+})();

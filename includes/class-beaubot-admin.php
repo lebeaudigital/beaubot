@@ -50,6 +50,48 @@ class BeauBot_Admin {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
+        
+        // AJAX pour tester l'API
+        add_action('wp_ajax_beaubot_test_api', [$this, 'ajax_test_api']);
+    }
+
+    /**
+     * Tester la connexion API via AJAX
+     */
+    public function ajax_test_api(): void {
+        check_ajax_referer('beaubot_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Accès non autorisé.', 'beaubot')]);
+        }
+        
+        $api_key = sanitize_text_field($_POST['api_key'] ?? '');
+        
+        if (empty($api_key)) {
+            wp_send_json_error(['message' => __('Clé API manquante.', 'beaubot')]);
+        }
+        
+        // Test direct avec la clé fournie
+        $response = wp_remote_get('https://api.openai.com/v1/models', [
+            'timeout' => 30,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+            ],
+        ]);
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => $response->get_error_message()]);
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        
+        if ($status_code === 200) {
+            wp_send_json_success(['message' => __('Connexion réussie !', 'beaubot')]);
+        } else {
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            $error_message = $body['error']['message'] ?? __('Erreur de connexion', 'beaubot');
+            wp_send_json_error(['message' => $error_message]);
+        }
     }
 
     /**
