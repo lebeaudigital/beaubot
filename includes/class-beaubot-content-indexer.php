@@ -163,8 +163,8 @@ class BeauBot_Content_Indexer {
         $args = [
             'post_type' => 'page',
             'post_status' => 'publish',
-            'posts_per_page' => 10,
-            'orderby' => 'menu_order',
+            'posts_per_page' => 20,
+            'orderby' => 'menu_order date',
             'order' => 'ASC',
         ];
 
@@ -215,8 +215,8 @@ class BeauBot_Content_Indexer {
         $content = $this->clean_content($post->post_content);
         
         // Limiter la longueur
-        if (strlen($content) > 2000) {
-            $content = substr($content, 0, 2000) . '...';
+        if (strlen($content) > 4000) {
+            $content = substr($content, 0, 4000) . '...';
         }
 
         // Catégories et tags pour les articles
@@ -253,20 +253,30 @@ class BeauBot_Content_Indexer {
         // Supprimer les shortcodes
         $content = strip_shortcodes($content);
         
-        // Supprimer les blocs Gutenberg non textuels
-        $content = preg_replace('/<!-- wp:[^>]*-->.*?<!-- \/wp:[^>]*-->/s', '', $content);
+        // Supprimer uniquement les commentaires Gutenberg (pas le contenu entre eux)
+        $content = preg_replace('/<!-- \/?wp:[^>]*-->/s', '', $content);
         
-        // Supprimer le HTML
+        // Supprimer les scripts et styles
+        $content = preg_replace('/<script[^>]*>.*?<\/script>/is', '', $content);
+        $content = preg_replace('/<style[^>]*>.*?<\/style>/is', '', $content);
+        
+        // Convertir les balises de bloc en retours à la ligne
+        $content = preg_replace('/<\/(p|div|h[1-6]|li|tr|br)>/i', "\n", $content);
+        
+        // Supprimer le HTML restant
         $content = wp_strip_all_tags($content);
         
         // Décoder les entités HTML
         $content = html_entity_decode($content, ENT_QUOTES, 'UTF-8');
         
-        // Supprimer les espaces multiples
-        $content = preg_replace('/\s+/', ' ', $content);
+        // Supprimer les espaces multiples (mais garder les retours à la ligne)
+        $content = preg_replace('/[ \t]+/', ' ', $content);
         
         // Supprimer les lignes vides multiples
         $content = preg_replace('/\n{3,}/', "\n\n", $content);
+        
+        // Nettoyer les espaces en début/fin de ligne
+        $content = preg_replace('/^ +| +$/m', '', $content);
         
         return trim($content);
     }
