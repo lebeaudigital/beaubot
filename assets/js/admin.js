@@ -26,6 +26,10 @@
 
             // Régénérer l'index
             $('#beaubot-reindex').on('click', this.reindexContent);
+
+            // Synchronisation color picker
+            $('#beaubot_primary_color').on('input', this.syncColorFromPicker);
+            $('#beaubot_primary_color_text').on('input', this.syncColorFromText);
         },
 
         /**
@@ -83,6 +87,24 @@
         updateTemperatureValue() {
             const value = $(this).val();
             $('#beaubot_temperature_value').text(value);
+        },
+
+        /**
+         * Synchroniser la couleur depuis le picker vers le champ texte
+         */
+        syncColorFromPicker() {
+            const value = $(this).val();
+            $('#beaubot_primary_color_text').val(value);
+        },
+
+        /**
+         * Synchroniser la couleur depuis le champ texte vers le picker
+         */
+        syncColorFromText() {
+            const value = $(this).val();
+            if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+                $('#beaubot_primary_color').val(value);
+            }
         },
 
         /**

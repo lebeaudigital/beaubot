@@ -91,6 +91,45 @@ if (!defined('ABSPATH')) {
             
             <table class="form-table">
                 <tr>
+                    <th scope="row">
+                        <label for="beaubot_bot_name"><?php esc_html_e('Nom du bot', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <?php $bot_name = $options['bot_name'] ?? 'BeauBot'; ?>
+                        <input type="text" 
+                               id="beaubot_bot_name" 
+                               name="beaubot_settings[bot_name]" 
+                               value="<?php echo esc_attr($bot_name); ?>" 
+                               class="regular-text"
+                               placeholder="BeauBot">
+                        <p class="description">
+                            <?php esc_html_e('Le nom affiché dans l\'en-tête du chatbot.', 'beaubot'); ?>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="beaubot_primary_color"><?php esc_html_e('Couleur principale', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <?php $primary_color = $options['primary_color'] ?? '#6366f1'; ?>
+                        <input type="color" 
+                               id="beaubot_primary_color" 
+                               name="beaubot_settings[primary_color]" 
+                               value="<?php echo esc_attr($primary_color); ?>"
+                               style="width: 60px; height: 40px; padding: 0; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                        <input type="text" 
+                               id="beaubot_primary_color_text" 
+                               value="<?php echo esc_attr($primary_color); ?>" 
+                               class="small-text"
+                               style="margin-left: 10px;"
+                               pattern="^#[0-9A-Fa-f]{6}$">
+                        <p class="description">
+                            <?php esc_html_e('Couleur du bouton, de l\'en-tête et des messages utilisateur.', 'beaubot'); ?>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
                     <th scope="row"><?php esc_html_e('Position de la sidebar', 'beaubot'); ?></th>
                     <td>
                         <?php $position = $options['sidebar_position'] ?? 'right'; ?>

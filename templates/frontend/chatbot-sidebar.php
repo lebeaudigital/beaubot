@@ -11,6 +11,8 @@ if (!defined('ABSPATH')) {
 
 $options = get_option('beaubot_settings', []);
 $position = $options['sidebar_position'] ?? 'right';
+$bot_name = $options['bot_name'] ?? 'BeauBot';
+$primary_color = $options['primary_color'] ?? '#6366f1';
 
 // Vérifier les préférences utilisateur
 $user_id = get_current_user_id();
@@ -18,7 +20,30 @@ $user_prefs = get_user_meta($user_id, 'beaubot_preferences', true);
 if (!empty($user_prefs['sidebar_position'])) {
     $position = $user_prefs['sidebar_position'];
 }
+
+// Calculer les variantes de couleur
+$primary_rgb = sscanf($primary_color, "#%02x%02x%02x");
+$primary_dark = sprintf("#%02x%02x%02x", 
+    max(0, $primary_rgb[0] - 20), 
+    max(0, $primary_rgb[1] - 20), 
+    max(0, $primary_rgb[2] - 20)
+);
+$primary_light = sprintf("#%02x%02x%02x", 
+    min(255, $primary_rgb[0] + 30), 
+    min(255, $primary_rgb[1] + 30), 
+    min(255, $primary_rgb[2] + 30)
+);
 ?>
+
+<!-- CSS Variables personnalisées -->
+<style>
+:root {
+    --beaubot-primary: <?php echo esc_attr($primary_color); ?>;
+    --beaubot-primary-dark: <?php echo esc_attr($primary_dark); ?>;
+    --beaubot-primary-light: <?php echo esc_attr($primary_light); ?>;
+    --beaubot-user-bg: <?php echo esc_attr($primary_color); ?>;
+}
+</style>
 
 <!-- Toggle Button -->
 <button id="beaubot-toggle" class="beaubot-<?php echo esc_attr($position); ?>" aria-label="<?php esc_attr_e('Ouvrir le chatbot', 'beaubot'); ?>">
@@ -44,7 +69,7 @@ if (!empty($user_prefs['sidebar_position'])) {
                     <line x1="15" y1="9" x2="15.01" y2="9"></line>
                 </svg>
             </div>
-            <span class="beaubot-title">BeauBot</span>
+            <span class="beaubot-title"><?php echo esc_html($bot_name); ?></span>
         </div>
         <div class="beaubot-header-actions">
             <button type="button" 

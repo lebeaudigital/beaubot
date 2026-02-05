@@ -99,6 +99,7 @@ class BeauBot_Frontend {
      */
     private function get_js_config(): array {
         $user = wp_get_current_user();
+        $bot_name = $this->options['bot_name'] ?? 'BeauBot';
         
         return [
             'restUrl' => rest_url('beaubot/v1/'),
@@ -106,6 +107,7 @@ class BeauBot_Frontend {
             'userId' => $user->ID,
             'userName' => $user->display_name,
             'userAvatar' => get_avatar_url($user->ID, ['size' => 40]),
+            'botName' => $bot_name,
             'sidebarPosition' => $this->options['sidebar_position'] ?? 'right',
             'maxFileSize' => wp_max_upload_size(),
             'allowedMimeTypes' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
@@ -117,7 +119,8 @@ class BeauBot_Frontend {
                 'history' => __('Historique', 'beaubot'),
                 'archive' => __('Archiver', 'beaubot'),
                 'delete' => __('Supprimer', 'beaubot'),
-                'typing' => __('BeauBot réfléchit...', 'beaubot'),
+                /* translators: %s is the bot name */
+                'typing' => sprintf(__('%s réfléchit...', 'beaubot'), $bot_name),
                 'error' => __('Une erreur est survenue. Veuillez réessayer.', 'beaubot'),
                 'networkError' => __('Erreur de connexion. Vérifiez votre connexion internet.', 'beaubot'),
                 'fileTooLarge' => __('Le fichier est trop volumineux.', 'beaubot'),
