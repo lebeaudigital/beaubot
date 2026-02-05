@@ -151,7 +151,14 @@ class BeauBot_Updater {
 
         $response = wp_remote_get($url, $args);
 
-        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+        if (is_wp_error($response)) {
+            error_log('[BeauBot Updater] API Error: ' . $response->get_error_message());
+            return null;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('[BeauBot Updater] API Response Code: ' . $response_code);
             return null;
         }
 
@@ -420,33 +427,84 @@ class BeauBot_Updater {
         // Forcer la vérification
         self::force_check();
         
-        // Vérifier si une mise à jour est disponible
-        $release = $this->get_github_release();
+        // Tester directement la connexion à GitHub
+        $test_url = 'https://api.github.com/repos/' . $this->github_username . '/' . $this->github_repo . '/releases/latest';
+        $test_response = wp_remote_get($test_url, [
+            'timeout' => 15,
+            'sslverify' => false, // Désactiver SSL pour environnements locaux
+            'headers' => [
+                'Accept' => 'application/vnd.github.v3+json',
+                'User-Agent' => 'BeauBot-Updater',
+            ],
+        ]);
+        
         $current_version = $this->plugin_data['Version'] ?? BEAUBOT_VERSION;
         
-        if ($release) {
-            $github_version = ltrim($release->tag_name, 'v');
-            
-            if (version_compare($github_version, $current_version, '>')) {
-                // Mise à jour disponible - rediriger vers la page de mise à jour
-                wp_redirect(admin_url('update-core.php'));
-                exit;
-            } else {
-                // Pas de mise à jour - afficher un message
-                add_action('admin_notices', function() use ($current_version) {
-                    echo '<div class="notice notice-info is-dismissible">';
-                    echo '<p>' . sprintf(
-                        __('BeauBot est à jour ! Version actuelle : %s', 'beaubot'),
-                        $current_version
-                    ) . '</p>';
-                    echo '</div>';
-                });
-            }
-        } else {
-            // Erreur de connexion
+        if (is_wp_error($test_response)) {
+            $error_message = $test_response->get_error_message();
+            add_action('admin_notices', function() use ($error_message) {
+                echo '<div class="notice notice-warning is-dismissible">';
+                echo '<p>' . sprintf(
+                    __('Impossible de contacter GitHub : %s', 'beaubot'),
+                    esc_html($error_message)
+                ) . '</p>';
+                echo '</div>';
+            });
+            return;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($test_response);
+        if ($response_code !== 200) {
+            add_action('admin_notices', function() use ($response_code) {
+                echo '<div class="notice notice-warning is-dismissible">';
+                echo '<p>' . sprintf(
+                    __('Erreur GitHub (code %d). Vérifiez que le dépôt existe et est public.', 'beaubot'),
+                    $response_code
+                ) . '</p>';
+                echo '</div>';
+            });
+            return;
+        }
+        
+        $body = wp_remote_retrieve_body($test_response);
+        $release_data = json_decode($body);
+        
+        if (empty($release_data) || !isset($release_data->tag_name)) {
             add_action('admin_notices', function() {
                 echo '<div class="notice notice-warning is-dismissible">';
-                echo '<p>' . __('Impossible de vérifier les mises à jour. Vérifiez votre connexion.', 'beaubot') . '</p>';
+                echo '<p>' . __('Aucune release trouvée sur GitHub.', 'beaubot') . '</p>';
+                echo '</div>';
+            });
+            return;
+        }
+        
+        $github_version = ltrim($release_data->tag_name, 'v');
+        
+        // Vider le cache
+        delete_transient('beaubot_github_release');
+        set_transient('beaubot_github_release', $release_data, 6 * HOUR_IN_SECONDS);
+        
+        if (version_compare($github_version, $current_version, '>')) {
+            // Forcer WordPress à revérifier
+            delete_site_transient('update_plugins');
+            
+            add_action('admin_notices', function() use ($github_version, $current_version) {
+                echo '<div class="notice notice-success is-dismissible">';
+                echo '<p>' . sprintf(
+                    __('Mise à jour disponible ! Version %s → %s. <a href="%s">Mettre à jour maintenant</a>', 'beaubot'),
+                    $current_version,
+                    $github_version,
+                    admin_url('update-core.php')
+                ) . '</p>';
+                echo '</div>';
+            });
+        } else {
+            add_action('admin_notices', function() use ($current_version) {
+                echo '<div class="notice notice-success is-dismissible">';
+                echo '<p>' . sprintf(
+                    __('BeauBot est à jour ! Version actuelle : %s', 'beaubot'),
+                    $current_version
+                ) . '</p>';
                 echo '</div>';
             });
         }
