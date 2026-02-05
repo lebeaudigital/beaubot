@@ -109,8 +109,12 @@ class BeauBot_Updater {
         // Après l'installation
         add_filter('upgrader_post_install', [$this, 'post_install'], 10, 3);
         
-        // Ajouter un lien dans la liste des plugins
+        // Ajouter des liens dans la liste des plugins
         add_filter('plugin_row_meta', [$this, 'plugin_row_meta'], 10, 2);
+        add_filter('plugin_action_links_' . $this->plugin_file, [$this, 'plugin_action_links']);
+        
+        // Gérer l'action de vérification forcée
+        add_action('admin_init', [$this, 'handle_force_check']);
     }
 
     /**
@@ -374,6 +378,78 @@ class BeauBot_Updater {
         $links[] = '<a href="https://github.com/' . $this->github_username . '/' . $this->github_repo . '/issues" target="_blank">' . __('Signaler un bug', 'beaubot') . '</a>';
 
         return $links;
+    }
+
+    /**
+     * Ajouter des liens d'action (à côté de Activer/Désactiver)
+     * @param array $links
+     * @return array
+     */
+    public function plugin_action_links(array $links): array {
+        $settings_link = '<a href="' . admin_url('admin.php?page=beaubot') . '">' . __('Paramètres', 'beaubot') . '</a>';
+        array_unshift($links, $settings_link);
+        
+        // Lien pour vérifier/forcer la mise à jour
+        $update_url = wp_nonce_url(
+            admin_url('plugins.php?beaubot_force_update=1'),
+            'beaubot_force_update'
+        );
+        $links[] = '<a href="' . esc_url($update_url) . '">' . __('Vérifier mise à jour', 'beaubot') . '</a>';
+        
+        return $links;
+    }
+
+    /**
+     * Gérer la vérification forcée des mises à jour
+     */
+    public function handle_force_check(): void {
+        if (!isset($_GET['beaubot_force_update'])) {
+            return;
+        }
+
+        // Vérifier le nonce
+        if (!wp_verify_nonce($_GET['_wpnonce'] ?? '', 'beaubot_force_update')) {
+            return;
+        }
+
+        // Vérifier les permissions
+        if (!current_user_can('update_plugins')) {
+            return;
+        }
+
+        // Forcer la vérification
+        self::force_check();
+        
+        // Vérifier si une mise à jour est disponible
+        $release = $this->get_github_release();
+        $current_version = $this->plugin_data['Version'] ?? BEAUBOT_VERSION;
+        
+        if ($release) {
+            $github_version = ltrim($release->tag_name, 'v');
+            
+            if (version_compare($github_version, $current_version, '>')) {
+                // Mise à jour disponible - rediriger vers la page de mise à jour
+                wp_redirect(admin_url('update-core.php'));
+                exit;
+            } else {
+                // Pas de mise à jour - afficher un message
+                add_action('admin_notices', function() use ($current_version) {
+                    echo '<div class="notice notice-info is-dismissible">';
+                    echo '<p>' . sprintf(
+                        __('BeauBot est à jour ! Version actuelle : %s', 'beaubot'),
+                        $current_version
+                    ) . '</p>';
+                    echo '</div>';
+                });
+            }
+        } else {
+            // Erreur de connexion
+            add_action('admin_notices', function() {
+                echo '<div class="notice notice-warning is-dismissible">';
+                echo '<p>' . __('Impossible de vérifier les mises à jour. Vérifiez votre connexion.', 'beaubot') . '</p>';
+                echo '</div>';
+            });
+        }
     }
 
     /**
