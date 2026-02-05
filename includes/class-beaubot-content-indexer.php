@@ -448,9 +448,10 @@ class BeauBot_Content_Indexer {
         // Nettoyer le contenu
         $content = $this->clean_content($post->post_content);
         
-        // Limiter la longueur
-        if (strlen($content) > 4000) {
-            $content = substr($content, 0, 4000) . '...';
+        // Limiter la longueur (augmenté pour capturer tout le contenu)
+        // 15000 caractères ≈ 3750 tokens, suffisant pour la plupart des pages
+        if (strlen($content) > 15000) {
+            $content = substr($content, 0, 15000) . '... [contenu tronqué]';
         }
 
         // Catégories et tags pour les articles
