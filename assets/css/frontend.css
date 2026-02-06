@@ -45,7 +45,6 @@
 #beaubot-sidebar *::after {
     box-sizing: border-box;
     margin: 0;
-    padding: 0;
 }
 
 /* ========================================
@@ -345,7 +344,7 @@
 }
 
 .beaubot-message-text {
-    padding: 14px 18px;
+    padding: 14px 18px !important;
     border-radius: var(--beaubot-radius);
     line-height: 1.6;
     font-size: 14px;
