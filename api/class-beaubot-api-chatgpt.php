@@ -108,14 +108,27 @@ class BeauBot_API_ChatGPT {
         $base_prompt = $this->options['system_prompt'] ?? '';
         
         $prompt = "Tu es l'assistant virtuel du site \"{$site_name}\". ";
-        $prompt .= "Tu DOIS répondre UNIQUEMENT en te basant sur le contenu du site fourni ci-dessous.\n\n";
+        $prompt .= "Tu es une RESSOURCE DE RECHERCHE. Quand l'utilisateur tape un mot ou pose une question, tu DOIS chercher ce terme dans le contenu ci-dessous et lui donner TOUTES les informations disponibles.\n\n";
+        
+        $prompt .= "MÉTHODE DE RECHERCHE:\n";
+        $prompt .= "1. Quand l'utilisateur donne un terme (ex: 'Génotypage'), RECHERCHE ce mot dans tout le contenu ci-dessous.\n";
+        $prompt .= "2. IGNORE les accents dans ta recherche: 'genotypage' = 'génotypage' = 'Génotypage'.\n";
+        $prompt .= "3. Cherche aussi les termes similaires et variantes (singulier/pluriel, avec/sans accent).\n";
+        $prompt .= "4. Donne TOUTES les informations trouvées sur ce terme, pas juste un résumé.\n\n";
+        
+        $prompt .= "FORMAT DE RÉPONSE:\n";
+        $prompt .= "1. Commence par indiquer dans quelle(s) page(s) tu as trouvé l'information.\n";
+        $prompt .= "2. SYNTHÉTISE les informations trouvées de manière claire et structurée.\n";
+        $prompt .= "3. Utilise des bullet points ou une structure lisible.\n";
+        $prompt .= "4. Fournis l'URL de la page source à la fin.\n";
+        $prompt .= "5. Si l'utilisateur demande plus de détails, donne-les.\n";
+        $prompt .= "6. Réponds en français.\n\n";
         
         $prompt .= "RÈGLES STRICTES:\n";
-        $prompt .= "1. Tu ne dois JAMAIS inventer d'informations. Utilise UNIQUEMENT les données fournies dans le contexte.\n";
-        $prompt .= "2. Si l'information n'est pas dans le contexte fourni, dis clairement: \"Je n'ai pas trouvé cette information dans le contenu du site.\"\n";
-        $prompt .= "3. Cite les titres des pages ou articles quand tu donnes une information.\n";
-        $prompt .= "4. Fournis les URLs des pages pertinentes.\n";
-        $prompt .= "5. Réponds en français.\n";
+        $prompt .= "- Ne dis JAMAIS que tu n'as pas trouvé l'info si le mot existe dans le contenu (même avec une casse ou accent différent).\n";
+        $prompt .= "- SYNTHÉTISE intelligemment : ne recopie pas mot pour mot, reformule et structure.\n";
+        $prompt .= "- Sois concis mais complet : donne les points essentiels sans noyer l'utilisateur.\n";
+        $prompt .= "- Si vraiment le terme n'existe pas du tout dans le contenu, alors seulement dis: \"Je n'ai pas trouvé d'information sur [terme] dans le contenu du site.\"\n";
         
         if (!empty($base_prompt)) {
             $prompt .= "\nInstructions supplémentaires du propriétaire du site:\n{$base_prompt}\n";
@@ -123,11 +136,11 @@ class BeauBot_API_ChatGPT {
 
         if ($site_context) {
             $prompt .= "\n" . str_repeat('=', 50) . "\n";
-            $prompt .= "CONTENU DU SITE (utilise ces informations pour répondre):\n";
+            $prompt .= "BASE DE DONNÉES DU SITE - CHERCHE ICI:\n";
             $prompt .= str_repeat('=', 50) . "\n\n";
             $prompt .= $site_context;
             $prompt .= "\n\n" . str_repeat('=', 50) . "\n";
-            $prompt .= "FIN DU CONTENU DU SITE\n";
+            $prompt .= "FIN DE LA BASE DE DONNÉES\n";
             $prompt .= str_repeat('=', 50) . "\n";
         } else {
             $prompt .= "\n[ATTENTION: Aucun contenu du site n'a été fourni. Indique à l'utilisateur de régénérer l'index.]\n";
