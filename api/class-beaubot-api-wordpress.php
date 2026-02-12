@@ -34,8 +34,10 @@ class BeauBot_API_WordPress {
 
     /**
      * Nombre maximum de tokens pour le contexte
+     * GPT-4o supporte 128K tokens, on utilise 60K pour laisser de la place
+     * au system prompt, à l'historique de conversation et à la réponse.
      */
-    private const MAX_CONTEXT_TOKENS = 20000;
+    private const MAX_CONTEXT_TOKENS = 60000;
 
     /**
      * Map des IDs parents pour la hiérarchie
@@ -417,9 +419,10 @@ class BeauBot_API_WordPress {
             $content .= "URL: {$url}\n";
 
             if (!empty($clean)) {
-                // Limiter la longueur par page
-                if (strlen($clean) > 15000) {
-                    $clean = substr($clean, 0, 15000) . '... [contenu tronqué]';
+                // Limiter la longueur par page pour que TOUTES les pages puissent être incluses
+                // Avec 17+ pages, 8000 chars/page × 17 = ~136K chars ≈ 34K tokens (< 60K max)
+                if (strlen($clean) > 8000) {
+                    $clean = substr($clean, 0, 8000) . '... [contenu tronqué]';
                 }
                 $content .= "Contenu:\n{$clean}\n";
             }
@@ -661,12 +664,12 @@ class BeauBot_API_WordPress {
      */
     public function run_diagnostics(): array {
         $results = [
-            'timestamp'     => current_time('mysql'),
-            'home_url'      => home_url(),
-            'rest_url'      => rest_url('wp/v2'),
-            'wp_version'    => get_bloginfo('version'),
+            'timestamp'       => current_time('mysql'),
+            'home_url'        => home_url(),
+            'rest_url'        => rest_url('wp/v2'),
+            'wp_version'      => get_bloginfo('version'),
             'configured_urls' => $this->api_base_urls,
-            'sources'       => [],
+            'sources'         => [],
         ];
 
         // Test 1 : Contenu local via WP_Query
@@ -674,14 +677,47 @@ class BeauBot_API_WordPress {
         $local_pages = $this->fetch_pages_internal();
         $duration = round(microtime(true) - $start, 3);
 
+        // Analyser le contenu de chaque page locale pour détecter les pages vides
+        $pages_detail = [];
+        $total_content_chars = 0;
+        $empty_pages_count = 0;
+
+        foreach ($local_pages as $page) {
+            $title = $page['title']['rendered'] ?? '(sans titre)';
+            $raw_content = $page['content']['rendered'] ?? '';
+            $clean_content = $this->clean_html_content($raw_content);
+            $content_length = strlen($clean_content);
+            $total_content_chars += $content_length;
+
+            $detail = [
+                'title'          => $title,
+                'content_chars'  => $content_length,
+                'has_content'    => $content_length > 50,
+                'preview'        => $content_length > 0 
+                    ? mb_substr($clean_content, 0, 200) . ($content_length > 200 ? '...' : '')
+                    : '(vide)',
+            ];
+
+            if ($content_length <= 50) {
+                $empty_pages_count++;
+                // Vérifier si post_content brut contient des shortcodes ou du contenu page builder
+                $raw_length = strlen($raw_content);
+                if ($raw_length > 0 && $content_length === 0) {
+                    $detail['warning'] = "HTML brut = {$raw_length} caractères mais contenu nettoyé = 0 (possible page builder ?)";
+                }
+            }
+
+            $pages_detail[] = $detail;
+        }
+
         $results['sources']['local'] = [
-            'method'   => 'WP_Query',
-            'success'  => !empty($local_pages),
-            'count'    => count($local_pages),
-            'duration' => $duration . 's',
-            'sample'   => !empty($local_pages) 
-                ? array_map(fn($p) => $p['title']['rendered'] ?? '(sans titre)', array_slice($local_pages, 0, 5))
-                : [],
+            'method'              => 'WP_Query',
+            'success'             => !empty($local_pages),
+            'count'               => count($local_pages),
+            'duration'            => $duration . 's',
+            'total_content_chars' => $total_content_chars,
+            'empty_pages'         => $empty_pages_count,
+            'pages_detail'        => $pages_detail,
         ];
 
         // Test 2 : Sources externes configurées
@@ -712,13 +748,24 @@ class BeauBot_API_WordPress {
                     'duration' => $duration . 's',
                 ];
             } else {
+                // Analyser le contenu des pages externes aussi
+                $ext_total = 0;
+                $ext_empty = 0;
+                foreach ($pages as $p) {
+                    $cl = strlen($this->clean_html_content($p['content']['rendered'] ?? ''));
+                    $ext_total += $cl;
+                    if ($cl <= 50) $ext_empty++;
+                }
+
                 $results['sources'][$api_url] = [
-                    'method'   => 'HTTP externe (wp_remote_get)',
-                    'is_local' => false,
-                    'success'  => true,
-                    'count'    => count($pages),
-                    'duration' => $duration . 's',
-                    'sample'   => array_map(fn($p) => $p['title']['rendered'] ?? '(sans titre)', array_slice($pages, 0, 5)),
+                    'method'              => 'HTTP externe (wp_remote_get)',
+                    'is_local'            => false,
+                    'success'             => true,
+                    'count'               => count($pages),
+                    'duration'            => $duration . 's',
+                    'total_content_chars' => $ext_total,
+                    'empty_pages'         => $ext_empty,
+                    'sample'              => array_map(fn($p) => $p['title']['rendered'] ?? '(sans titre)', array_slice($pages, 0, 5)),
                 ];
             }
         }
@@ -729,7 +776,33 @@ class BeauBot_API_WordPress {
             'exists'  => $cached !== false,
             'size'    => $cached !== false ? strlen($cached) : 0,
             'size_kb' => $cached !== false ? round(strlen($cached) / 1024, 2) : 0,
+            'preview' => ($cached !== false && strlen($cached) > 0)
+                ? mb_substr($cached, 0, 500) . '...'
+                : '(vide)',
         ];
+
+        // Test 4 : Simuler get_site_context() pour vérifier le résultat final
+        // Vider le cache d'abord pour forcer un rechargement frais
+        delete_transient(self::CACHE_KEY);
+        $context = $this->get_site_context('test diagnostic');
+        $results['context_test'] = [
+            'length'        => strlen($context),
+            'tokens_est'    => $this->estimate_tokens($context),
+            'max_tokens'    => self::MAX_CONTEXT_TOKENS,
+            'max_chars_page' => 8000,
+            'is_truncated'  => $this->estimate_tokens($context) >= self::MAX_CONTEXT_TOKENS * 0.95,
+            'preview_start' => mb_substr($context, 0, 300) . '...',
+            'preview_end'   => '...' . mb_substr($context, -300),
+            'has_content'   => strlen($context) > 500,
+        ];
+
+        // Test 5 : Vérifier si des termes spécifiques sont dans le contexte final
+        $test_terms = ['CIA', 'environnement', 'génétique', 'GEEP', 'lisier'];
+        $term_check = [];
+        foreach ($test_terms as $term) {
+            $term_check[$term] = stripos($context, $term) !== false;
+        }
+        $results['term_check'] = $term_check;
 
         return $results;
     }

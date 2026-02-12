@@ -230,62 +230,7 @@
                 },
                 success(response) {
                     if (response.success) {
-                        const data = response.data;
-                        let html = '';
-
-                        // Infos générales
-                        html += `<div style="margin-bottom: 12px;">`;
-                        html += `<strong>URL du site :</strong> ${data.home_url}<br>`;
-                        html += `<strong>URL REST locale :</strong> ${data.rest_url}<br>`;
-                        html += `<strong>WordPress :</strong> ${data.wp_version}<br>`;
-                        html += `<strong>Date :</strong> ${data.timestamp}`;
-                        html += `</div>`;
-
-                        // Sources
-                        html += `<div style="border-top: 1px solid #ddd; padding-top: 12px;">`;
-                        html += `<strong>Sources configurées :</strong> ${data.configured_urls.join(', ')}<br><br>`;
-                        
-                        for (const [key, source] of Object.entries(data.sources)) {
-                            const statusIcon = source.success ? '&#9989;' : '&#10060;';
-                            const statusColor = source.success ? '#059669' : '#dc2626';
-                            
-                            html += `<div style="margin-bottom: 10px; padding: 8px; background: #fff; border-radius: 4px; border-left: 3px solid ${statusColor};">`;
-                            html += `<strong>${statusIcon} ${key}</strong><br>`;
-                            html += `<span style="color: #666;">Méthode : ${source.method}</span><br>`;
-                            
-                            if (source.success) {
-                                html += `<span style="color: ${statusColor};">${source.count} page(s) récupérée(s)</span>`;
-                                if (source.duration) {
-                                    html += ` <span style="color: #666;">en ${source.duration}</span>`;
-                                }
-                                if (source.sample && source.sample.length > 0) {
-                                    html += `<br><span style="color: #888; font-size: 12px;">Exemples : ${source.sample.join(', ')}</span>`;
-                                }
-                            } else {
-                                html += `<span style="color: ${statusColor};">Échec</span>`;
-                                if (source.error) {
-                                    html += ` : ${source.error}`;
-                                }
-                                if (source.note) {
-                                    html += `<br><span style="color: #888;">${source.note}</span>`;
-                                }
-                            }
-                            
-                            html += `</div>`;
-                        }
-                        html += `</div>`;
-
-                        // Cache
-                        html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
-                        html += `<strong>Cache :</strong> `;
-                        if (data.cache.exists) {
-                            html += `Actif (${data.cache.size_kb} Ko / ${data.cache.size} caractères)`;
-                        } else {
-                            html += `<span style="color: #b45309;">Vide</span>`;
-                        }
-                        html += `</div>`;
-
-                        contentDiv.html(html);
+                        contentDiv.html(BeauBotAdmin.formatDiagnostics(response.data));
                     } else {
                         contentDiv.html('<p style="color: #dc2626;">Erreur lors du diagnostic</p>');
                     }
@@ -297,6 +242,159 @@
                     button.prop('disabled', false).html(originalHtml);
                 }
             });
+        },
+
+        /**
+         * Formater les résultats du diagnostic en HTML
+         * @param {Object} data
+         * @returns {string}
+         */
+        formatDiagnostics(data) {
+            let html = '';
+
+            // Infos générales
+            html += `<div style="margin-bottom: 12px;">`;
+            html += `<strong>URL du site :</strong> ${data.home_url}<br>`;
+            html += `<strong>URL REST locale :</strong> ${data.rest_url}<br>`;
+            html += `<strong>WordPress :</strong> ${data.wp_version}<br>`;
+            html += `<strong>Date :</strong> ${data.timestamp}`;
+            html += `</div>`;
+
+            // Sources
+            html += `<div style="border-top: 1px solid #ddd; padding-top: 12px;">`;
+            html += `<strong>Sources configurées :</strong> ${data.configured_urls.join(', ')}<br><br>`;
+            
+            for (const [key, source] of Object.entries(data.sources)) {
+                const statusIcon = source.success ? '&#9989;' : '&#10060;';
+                const statusColor = source.success ? '#059669' : '#dc2626';
+                
+                html += `<div style="margin-bottom: 10px; padding: 8px; background: #fff; border-radius: 4px; border-left: 3px solid ${statusColor};">`;
+                html += `<strong>${statusIcon} ${key}</strong><br>`;
+                html += `<span style="color: #666;">Méthode : ${source.method}</span><br>`;
+                
+                if (source.success) {
+                    html += `<span style="color: ${statusColor};">${source.count} page(s) récupérée(s)</span>`;
+                    if (source.duration) {
+                        html += ` <span style="color: #666;">en ${source.duration}</span>`;
+                    }
+                    
+                    // Contenu total
+                    if (source.total_content_chars !== undefined) {
+                        const totalKb = (source.total_content_chars / 1024).toFixed(1);
+                        html += `<br><strong>Contenu total :</strong> ${source.total_content_chars} caractères (${totalKb} Ko)`;
+                        if (source.empty_pages > 0) {
+                            html += ` <span style="color: #b45309;">&#9888; ${source.empty_pages} page(s) vide(s)</span>`;
+                        }
+                    }
+                    
+                    // Détail par page (si disponible)
+                    if (source.pages_detail && source.pages_detail.length > 0) {
+                        html += `<br><br><strong>Détail par page :</strong>`;
+                        html += `<table style="width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 12px;">`;
+                        html += `<tr style="background: #f0f0f0;"><th style="padding: 4px; text-align: left;">Page</th><th style="padding: 4px; text-align: right;">Contenu</th><th style="padding: 4px; text-align: left;">Aperçu</th></tr>`;
+                        
+                        for (const page of source.pages_detail) {
+                            const rowColor = page.has_content ? '' : 'background: #fef3cd;';
+                            const contentStatus = page.has_content 
+                                ? `<span style="color: #059669;">${page.content_chars} car.</span>` 
+                                : `<span style="color: #dc2626;">&#10060; ${page.content_chars} car.</span>`;
+                            
+                            html += `<tr style="${rowColor}">`;
+                            html += `<td style="padding: 4px; border-bottom: 1px solid #eee;">${BeauBotAdmin.escapeHtml(page.title)}</td>`;
+                            html += `<td style="padding: 4px; border-bottom: 1px solid #eee; text-align: right;">${contentStatus}</td>`;
+                            html += `<td style="padding: 4px; border-bottom: 1px solid #eee; color: #888; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${BeauBotAdmin.escapeHtml(page.preview.substring(0, 100))}</td>`;
+                            html += `</tr>`;
+                            
+                            if (page.warning) {
+                                html += `<tr><td colspan="3" style="padding: 2px 4px; color: #b45309; font-style: italic;">&#9888; ${BeauBotAdmin.escapeHtml(page.warning)}</td></tr>`;
+                            }
+                        }
+                        html += `</table>`;
+                    }
+                    
+                    // Exemples (pour sources externes)
+                    if (source.sample && source.sample.length > 0 && !source.pages_detail) {
+                        html += `<br><span style="color: #888; font-size: 12px;">Exemples : ${source.sample.join(', ')}</span>`;
+                    }
+                } else {
+                    html += `<span style="color: ${statusColor};">Échec</span>`;
+                    if (source.error) {
+                        html += ` : ${source.error}`;
+                    }
+                    if (source.note) {
+                        html += `<br><span style="color: #888;">${source.note}</span>`;
+                    }
+                }
+                
+                html += `</div>`;
+            }
+            html += `</div>`;
+
+            // Cache
+            html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
+            html += `<strong>Cache :</strong> `;
+            if (data.cache.exists) {
+                html += `Actif (${data.cache.size_kb} Ko / ${data.cache.size} caractères)`;
+            } else {
+                html += `<span style="color: #b45309;">Vide</span>`;
+            }
+            html += `</div>`;
+
+            // Test du contexte
+            if (data.context_test) {
+                const ctxColor = data.context_test.has_content ? '#059669' : '#dc2626';
+                const ctxIcon = data.context_test.has_content ? '&#9989;' : '&#10060;';
+                html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
+                html += `<strong>${ctxIcon} Contexte envoyé à ChatGPT :</strong> `;
+                html += `<span style="color: ${ctxColor};">${data.context_test.length} caractères</span>`;
+                
+                // Infos tokens
+                if (data.context_test.tokens_est !== undefined) {
+                    const pct = ((data.context_test.tokens_est / data.context_test.max_tokens) * 100).toFixed(1);
+                    const tokenColor = data.context_test.is_truncated ? '#dc2626' : '#059669';
+                    html += `<br><strong>Tokens estimés :</strong> <span style="color: ${tokenColor};">${data.context_test.tokens_est.toLocaleString()} / ${data.context_test.max_tokens.toLocaleString()} (${pct}%)</span>`;
+                    if (data.context_test.is_truncated) {
+                        html += ` <span style="color: #dc2626;">&#9888; Contexte tronqué !</span>`;
+                    }
+                    html += `<br><strong>Limite par page :</strong> ${data.context_test.max_chars_page.toLocaleString()} caractères`;
+                }
+                
+                if (data.context_test.preview_start) {
+                    html += `<br><br><strong>Début du contexte :</strong>`;
+                    html += `<pre style="background: #fff; padding: 8px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 11px; max-height: 150px; overflow-y: auto;">${BeauBotAdmin.escapeHtml(data.context_test.preview_start)}</pre>`;
+                }
+                if (data.context_test.preview_end) {
+                    html += `<strong>Fin du contexte :</strong>`;
+                    html += `<pre style="background: #fff; padding: 8px; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 11px; max-height: 150px; overflow-y: auto;">${BeauBotAdmin.escapeHtml(data.context_test.preview_end)}</pre>`;
+                }
+                html += `</div>`;
+            }
+
+            // Vérification de termes
+            if (data.term_check) {
+                html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
+                html += `<strong>Vérification de termes dans le contexte :</strong><br>`;
+                for (const [term, found] of Object.entries(data.term_check)) {
+                    const icon = found ? '&#9989;' : '&#10060;';
+                    const color = found ? '#059669' : '#dc2626';
+                    html += `<span style="display: inline-block; margin: 2px 8px 2px 0; padding: 2px 8px; background: ${found ? '#ecfdf5' : '#fef2f2'}; border-radius: 4px; color: ${color};">${icon} ${BeauBotAdmin.escapeHtml(term)}</span>`;
+                }
+                html += `</div>`;
+            }
+
+            return html;
+        },
+
+        /**
+         * Échapper le HTML pour l'affichage sécurisé
+         * @param {string} text
+         * @returns {string}
+         */
+        escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
         },
 
         /**
