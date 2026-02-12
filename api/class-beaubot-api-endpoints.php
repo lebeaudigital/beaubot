@@ -236,7 +236,7 @@ class BeauBot_API_Endpoints {
         $conversation_handler = new BeauBot_Conversation();
         $image_handler = new BeauBot_Image();
         $chatgpt = new BeauBot_API_ChatGPT();
-        $indexer = new BeauBot_Content_Indexer();
+        $wp_api = new BeauBot_API_WordPress();
 
         // Créer une nouvelle conversation si nécessaire
         if (!$conversation_id) {
@@ -300,18 +300,18 @@ class BeauBot_API_Endpoints {
         // Obtenir l'historique des messages pour le contexte
         $messages = $conversation_handler->get_messages_for_context($conversation_id, $user_id);
 
-        // Obtenir le contexte du site
-        $site_context = $indexer->get_site_context($message);
+        // Obtenir le contexte du site via l'API WordPress REST
+        $site_context = $wp_api->get_site_context($message);
         
         // Log pour debug
-        error_log("[BeauBot] Getting site context for message: " . substr($message, 0, 100));
+        error_log("[BeauBot] Getting site context via WP API for message: " . substr($message, 0, 100));
         error_log("[BeauBot] Context retrieved: " . (empty($site_context) ? "EMPTY!" : strlen($site_context) . " chars"));
         
         if (empty($site_context)) {
-            error_log("[BeauBot] Attempting to regenerate index...");
-            $indexer->generate_index();
-            $site_context = $indexer->get_site_context($message);
-            error_log("[BeauBot] After regeneration: " . (empty($site_context) ? "STILL EMPTY!" : strlen($site_context) . " chars"));
+            error_log("[BeauBot] Attempting to refresh WP API cache...");
+            $wp_api->clear_cache();
+            $site_context = $wp_api->get_site_context($message);
+            error_log("[BeauBot] After refresh: " . (empty($site_context) ? "STILL EMPTY!" : strlen($site_context) . " chars"));
         }
 
         // Envoyer à ChatGPT

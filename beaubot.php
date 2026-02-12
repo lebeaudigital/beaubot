@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.0.5
+ * Version: 1.0.6
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.0.5');
+define('BEAUBOT_VERSION', '1.0.6');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -69,11 +69,11 @@ class BeauBot {
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-frontend.php';
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-conversation.php';
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-image.php';
-        require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-content-indexer.php';
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-updater.php';
         
         // Classes API
         require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-chatgpt.php';
+        require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-wordpress.php';
         require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-endpoints.php';
     }
 
@@ -260,23 +260,9 @@ class BeauBot {
             KEY expires_at (expires_at)
         ) $charset_collate;";
         
-        // Table pour le cache du contenu indexé
-        $table_content = $wpdb->prefix . 'beaubot_content_cache';
-        $sql_content = "CREATE TABLE $table_content (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            post_id bigint(20) unsigned NOT NULL,
-            content_hash varchar(64) NOT NULL,
-            indexed_content longtext NOT NULL,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY post_id (post_id),
-            KEY content_hash (content_hash)
-        ) $charset_collate;";
-        
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         dbDelta($sql_messages);
         dbDelta($sql_images);
-        dbDelta($sql_content);
     }
 }
 

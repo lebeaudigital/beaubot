@@ -222,39 +222,81 @@ if (!defined('ABSPATH')) {
             </table>
         </div>
 
+        <!-- Section Sources API WordPress -->
+        <div class="beaubot-card">
+            <h2><?php esc_html_e('Sources de contenu (API WordPress)', 'beaubot'); ?></h2>
+            <p class="description"><?php esc_html_e('Ajoutez les URLs des API REST WordPress dont le chatbot doit récupérer le contenu des pages.', 'beaubot'); ?></p>
+            
+            <table class="form-table">
+                <tr>
+                    <th scope="row">
+                        <label><?php esc_html_e('URLs des API', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <?php 
+                        $wp_api_urls = $options['wp_api_urls'] ?? ['https://ifip.lebeaudigital.fr/memento/wp-json/wp/v2'];
+                        if (empty($wp_api_urls)) {
+                            $wp_api_urls = [''];
+                        }
+                        ?>
+                        <div id="beaubot-api-urls-wrapper">
+                            <?php foreach ($wp_api_urls as $index => $url): ?>
+                                <div class="beaubot-api-url-row" style="display: flex; align-items: center; margin-bottom: 8px; gap: 8px;">
+                                    <input type="url" 
+                                           name="beaubot_settings[wp_api_urls][]" 
+                                           value="<?php echo esc_attr($url); ?>" 
+                                           class="regular-text"
+                                           placeholder="https://example.com/wp-json/wp/v2">
+                                    <button type="button" class="button beaubot-remove-url" title="<?php esc_attr_e('Supprimer', 'beaubot'); ?>" style="color: #b91c1c;">
+                                        <span class="dashicons dashicons-trash" style="margin-top: 3px;"></span>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" class="button" id="beaubot-add-url" style="margin-top: 4px;">
+                            <span class="dashicons dashicons-plus-alt2" style="margin-top: 3px;"></span>
+                            <?php esc_html_e('Ajouter une URL', 'beaubot'); ?>
+                        </button>
+                        <p class="description" style="margin-top: 10px;">
+                            <?php esc_html_e('Chaque URL doit pointer vers la base de l\'API REST WordPress (ex: https://monsite.com/wp-json/wp/v2). Le chatbot récupérera les pages de chaque source.', 'beaubot'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
         <?php submit_button(__('Enregistrer les modifications', 'beaubot')); ?>
     </form>
 
-    <!-- Section Indexation -->
+    <!-- Section Cache API WordPress -->
     <div class="beaubot-card">
-        <h2><?php esc_html_e('Indexation du Contenu', 'beaubot'); ?></h2>
-        <p class="description"><?php esc_html_e('Le chatbot utilise un index du contenu de votre site pour répondre aux questions. Régénérez l\'index après avoir modifié vos pages.', 'beaubot'); ?></p>
+        <h2><?php esc_html_e('Cache du contenu', 'beaubot'); ?></h2>
+        <p class="description"><?php esc_html_e('Le chatbot récupère le contenu des pages via les API REST WordPress configurées ci-dessus. Le cache se rafraîchit automatiquement toutes les heures.', 'beaubot'); ?></p>
         
         <?php
-        $indexer = new BeauBot_Content_Indexer();
-        $stats = $indexer->get_index_stats();
+        $wp_api = new BeauBot_API_WordPress();
+        $stats = $wp_api->get_cache_stats();
         ?>
         
         <table class="form-table">
             <tr>
-                <th scope="row"><?php esc_html_e('Statut de l\'index', 'beaubot'); ?></th>
+                <th scope="row"><?php esc_html_e('Statut du cache', 'beaubot'); ?></th>
                 <td>
                     <div id="beaubot-index-status">
-                        <?php if ($stats['exists']): ?>
+                        <?php if ($stats['cached']): ?>
                             <span class="beaubot-status beaubot-status-success">
-                                <?php esc_html_e('Index généré', 'beaubot'); ?>
+                                <?php esc_html_e('Cache actif', 'beaubot'); ?>
                             </span>
                             <ul style="margin-top: 10px; color: #666;">
-                                <li><strong><?php esc_html_e('Contenus indexés:', 'beaubot'); ?></strong> <?php echo esc_html($stats['count']); ?></li>
                                 <li><strong><?php esc_html_e('Taille:', 'beaubot'); ?></strong> <?php echo esc_html($stats['size']); ?> Ko</li>
-                                <li><strong><?php esc_html_e('Dernière génération:', 'beaubot'); ?></strong> <?php echo esc_html($stats['generated_at']); ?></li>
+                                <li><strong><?php esc_html_e('Sources:', 'beaubot'); ?></strong> <?php echo esc_html(count($stats['api_urls'])); ?> API(s) configurée(s)</li>
                             </ul>
                         <?php else: ?>
                             <span class="beaubot-status beaubot-status-warning">
-                                <?php esc_html_e('Index non généré', 'beaubot'); ?>
+                                <?php esc_html_e('Aucun cache', 'beaubot'); ?>
                             </span>
                             <p style="color: #b45309; margin-top: 10px;">
-                                <?php esc_html_e('Cliquez sur "Régénérer l\'index" pour indexer le contenu de votre site.', 'beaubot'); ?>
+                                <?php esc_html_e('Cliquez sur "Rafraîchir le cache" pour récupérer le contenu via les API WordPress.', 'beaubot'); ?>
                             </p>
                         <?php endif; ?>
                     </div>
@@ -265,11 +307,11 @@ if (!defined('ABSPATH')) {
                 <td>
                     <button type="button" class="button button-primary" id="beaubot-reindex">
                         <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
-                        <?php esc_html_e('Régénérer l\'index', 'beaubot'); ?>
+                        <?php esc_html_e('Rafraîchir le cache', 'beaubot'); ?>
                     </button>
                     <span id="beaubot-reindex-status" style="margin-left: 10px;"></span>
                     <p class="description" style="margin-top: 10px;">
-                        <?php esc_html_e('L\'index se met à jour automatiquement quand vous modifiez une page, mais vous pouvez le forcer ici.', 'beaubot'); ?>
+                        <?php esc_html_e('Le cache se met à jour automatiquement toutes les heures. Vous pouvez forcer un rafraîchissement ici.', 'beaubot'); ?>
                     </p>
                 </td>
             </tr>

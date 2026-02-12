@@ -30,6 +30,10 @@
             // Synchronisation color picker
             $('#beaubot_primary_color').on('input', this.syncColorFromPicker);
             $('#beaubot_primary_color_text').on('input', this.syncColorFromText);
+
+            // Gestion des URLs API WordPress
+            $('#beaubot-add-url').on('click', this.addApiUrl);
+            $(document).on('click', '.beaubot-remove-url', this.removeApiUrl);
         },
 
         /**
@@ -117,15 +121,49 @@
         },
 
         /**
-         * Régénérer l'index du contenu
+         * Ajouter un champ URL API WordPress
+         */
+        addApiUrl() {
+            const row = $(`
+                <div class="beaubot-api-url-row" style="display: flex; align-items: center; margin-bottom: 8px; gap: 8px;">
+                    <input type="url" 
+                           name="beaubot_settings[wp_api_urls][]" 
+                           value="" 
+                           class="regular-text"
+                           placeholder="https://example.com/wp-json/wp/v2">
+                    <button type="button" class="button beaubot-remove-url" title="Supprimer" style="color: #b91c1c;">
+                        <span class="dashicons dashicons-trash" style="margin-top: 3px;"></span>
+                    </button>
+                </div>
+            `);
+            $('#beaubot-api-urls-wrapper').append(row);
+            row.find('input').focus();
+        },
+
+        /**
+         * Supprimer un champ URL API WordPress
+         */
+        removeApiUrl() {
+            const wrapper = $('#beaubot-api-urls-wrapper');
+            // Garder au moins un champ
+            if (wrapper.find('.beaubot-api-url-row').length > 1) {
+                $(this).closest('.beaubot-api-url-row').remove();
+            } else {
+                // Vider le dernier champ au lieu de le supprimer
+                $(this).closest('.beaubot-api-url-row').find('input').val('');
+            }
+        },
+
+        /**
+         * Rafraîchir le cache du contenu
          */
         reindexContent() {
             const button = $(this);
             const status = $('#beaubot-reindex-status');
             const originalHtml = button.html();
             
-            button.prop('disabled', true).html('<span class="dashicons dashicons-update spinning"></span> Indexation en cours...');
-            status.html('<span style="color: #666;">Veuillez patienter...</span>');
+            button.prop('disabled', true).html('<span class="dashicons dashicons-update spinning"></span> Chargement en cours...');
+            status.html('<span style="color: #666;">Récupération via l\'API WordPress...</span>');
 
             $.ajax({
                 url: beaubotAdmin.ajaxUrl,
@@ -137,20 +175,24 @@
                 success(response) {
                     if (response.success) {
                         status.html('<span style="color: #059669;">' + response.data.message + '</span>');
-                        BeauBotAdmin.showNotice('success', 'Index régénéré avec succès !');
+                        BeauBotAdmin.showNotice('success', 'Cache rafraîchi avec succès !');
                         
                         // Mettre à jour l'affichage des stats
+                        const sourcesInfo = response.data.sources > 1 
+                            ? `<li><strong>Sources:</strong> ${response.data.sources} API(s)</li>` 
+                            : '';
                         $('#beaubot-index-status').html(`
-                            <span class="beaubot-status beaubot-status-success">Index généré</span>
+                            <span class="beaubot-status beaubot-status-success">Cache actif</span>
                             <ul style="margin-top: 10px; color: #666;">
-                                <li><strong>Contenus indexés:</strong> ${response.data.count}</li>
+                                <li><strong>Pages récupérées:</strong> ${response.data.count}</li>
+                                ${sourcesInfo}
                                 <li><strong>Taille:</strong> ${response.data.size} Ko</li>
-                                <li><strong>Généré en:</strong> ${response.data.duration}s</li>
+                                <li><strong>Chargé en:</strong> ${response.data.duration}s</li>
                             </ul>
                         `);
                     } else {
                         status.html('<span style="color: #dc2626;">' + (response.data?.message || 'Erreur') + '</span>');
-                        BeauBotAdmin.showNotice('error', response.data?.message || 'Erreur lors de l\'indexation');
+                        BeauBotAdmin.showNotice('error', response.data?.message || 'Erreur lors du rafraîchissement');
                     }
                 },
                 error() {

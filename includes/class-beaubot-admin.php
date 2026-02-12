@@ -98,7 +98,7 @@ class BeauBot_Admin {
     }
 
     /**
-     * Régénérer l'index du contenu via AJAX
+     * Rafraîchir le cache du contenu via l'API WordPress REST (AJAX)
      */
     public function ajax_reindex(): void {
         check_ajax_referer('beaubot_admin_nonce', 'nonce');
@@ -107,8 +107,8 @@ class BeauBot_Admin {
             wp_send_json_error(['message' => __('Accès non autorisé.', 'beaubot')]);
         }
         
-        $indexer = new BeauBot_Content_Indexer();
-        $result = $indexer->force_reindex();
+        $wp_api = new BeauBot_API_WordPress();
+        $result = $wp_api->force_refresh();
         
         if ($result['success']) {
             wp_send_json_success($result);
@@ -248,6 +248,7 @@ class BeauBot_Admin {
             'max_tokens' => 1000,
             'temperature' => 0.7,
             'system_prompt' => __('Tu es un assistant virtuel pour ce site web. Tu réponds aux questions en te basant sur le contenu du site.', 'beaubot'),
+            'wp_api_urls' => ['https://ifip.lebeaudigital.fr/memento/wp-json/wp/v2'],
         ];
     }
 
@@ -278,6 +279,27 @@ class BeauBot_Admin {
         // Valider les limites
         $sanitized['max_tokens'] = max(100, min(4000, $sanitized['max_tokens']));
         $sanitized['temperature'] = max(0, min(2, $sanitized['temperature']));
+        
+        // URLs des API WordPress
+        $raw_urls = $input['wp_api_urls'] ?? [];
+        $sanitized['wp_api_urls'] = [];
+        if (is_array($raw_urls)) {
+            foreach ($raw_urls as $url) {
+                $url = esc_url_raw(trim($url));
+                if (!empty($url)) {
+                    // Supprimer le slash final
+                    $sanitized['wp_api_urls'][] = rtrim($url, '/');
+                }
+            }
+        }
+        // Si aucune URL valide, garder la valeur par défaut
+        if (empty($sanitized['wp_api_urls'])) {
+            $sanitized['wp_api_urls'] = ['https://ifip.lebeaudigital.fr/memento/wp-json/wp/v2'];
+        }
+        
+        // Vider le cache API WP car les URLs ont pu changer
+        $wp_api = new BeauBot_API_WordPress();
+        $wp_api->clear_cache();
         
         return $sanitized;
     }

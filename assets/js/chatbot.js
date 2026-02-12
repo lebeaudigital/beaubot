@@ -197,9 +197,8 @@
     BeauBot.prototype.showWelcomeMessage = function() {
         var botName = this.config.botName || 'BeauBot';
         var welcomeMessage = 'Bonjour ' + this.config.userName + ' ! 👋\n\n' +
-            'Je suis ' + botName + ', votre assistant virtuel. Je peux répondre à vos questions sur le contenu de ce site.\n\n' +
-            'Vous pouvez également m\'envoyer des images pour que je les analyse.\n\n' +
-            'Comment puis-je vous aider ?';
+            'Je suis ' + botName + ', votre assistant IA. Je peux répondre à vos questions sur le contenu de ce site.\n\n' +
+            'Comment puis-je vous aider aujourd\'hui ?';
 
         this.addMessage('assistant', welcomeMessage);
     };
