@@ -26,10 +26,26 @@
 
     /**
      * Restaurer l'état ouvert/fermé depuis localStorage
+     * Désactive temporairement les transitions CSS pour éviter l'animation
      */
     BeauBotSidebar.prototype.restoreOpenState = function() {
         if (localStorage.getItem('beaubot_sidebar_open') === 'true') {
+            // Désactiver les transitions pour une ouverture instantanée
+            if (this.container) this.container.style.transition = 'none';
+            if (this.toggleButton) this.toggleButton.style.transition = 'none';
+            if (this.overlay) this.overlay.style.transition = 'none';
+
             this.open();
+
+            // Réactiver les transitions après le rendu
+            var self = this;
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    if (self.container) self.container.style.transition = '';
+                    if (self.toggleButton) self.toggleButton.style.transition = '';
+                    if (self.overlay) self.overlay.style.transition = '';
+                });
+            });
         }
     };
 
