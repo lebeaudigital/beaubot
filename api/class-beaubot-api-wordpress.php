@@ -40,9 +40,10 @@ class BeauBot_API_WordPress {
 
     /**
      * Nombre maximum de tokens pour le contexte RAG
-     * En mode RAG, on envoie uniquement les chunks pertinents (~5-10K tokens).
+     * En mode RAG, on envoie uniquement les chunks pertinents.
+     * 15K tokens laisse de la place pour ~8 chunks de 1500 chars + métadonnées.
      */
-    private const RAG_MAX_CONTEXT_TOKENS = 8000;
+    private const RAG_MAX_CONTEXT_TOKENS = 15000;
 
     /**
      * Taille d'un chunk en caractères
@@ -55,9 +56,9 @@ class BeauBot_API_WordPress {
     private const CHUNK_OVERLAP = 200;
 
     /**
-     * Nombre de chunks les plus pertinents à retourner
+     * Nombre de chunks les plus pertinents à retourner par méthode de recherche
      */
-    private const TOP_K_RESULTS = 5;
+    private const TOP_K_RESULTS = 8;
 
     /**
      * Map des IDs parents pour la hiérarchie
@@ -1010,12 +1011,11 @@ class BeauBot_API_WordPress {
     }
 
     /**
-     * Rechercher les chunks les plus pertinents pour une question (mode RAG).
+     * Recherche HYBRIDE : sémantique (embeddings) + mots-clés.
      * 
-     * 1. Génère un embedding pour la question
-     * 2. Charge tous les embeddings des chunks depuis la BDD
-     * 3. Calcule la similarité cosinus
-     * 4. Retourne le contexte formaté avec les top K chunks
+     * Étape 1 : Recherche sémantique via embeddings (comprend le sens)
+     * Étape 2 : Recherche par mots-clés (trouve les termes exacts, acronymes, etc.)
+     * Étape 3 : Fusion et dédoublonnage des résultats
      * 
      * @param string $query Question de l'utilisateur
      * @param int $top_k Nombre de résultats (défaut: TOP_K_RESULTS)
@@ -1024,22 +1024,7 @@ class BeauBot_API_WordPress {
     public function search_relevant_chunks(string $query, int $top_k = self::TOP_K_RESULTS): string {
         $start = microtime(true);
 
-        $embeddings_api = new BeauBot_API_Embeddings();
-
-        if (!$embeddings_api->is_configured()) {
-            error_log("[BeauBot RAG] API key not configured, falling back to full context");
-            return $this->get_fallback_context();
-        }
-
-        // Générer l'embedding de la question
-        $query_embedding = $embeddings_api->generate_embedding($query);
-
-        if (is_wp_error($query_embedding)) {
-            error_log("[BeauBot RAG] Query embedding error: " . $query_embedding->get_error_message());
-            return $this->get_fallback_context();
-        }
-
-        // Charger tous les chunks avec embeddings depuis la BDD
+        // Charger tous les chunks depuis la BDD
         $chunk_data = $this->load_chunks_with_embeddings();
 
         if (empty($chunk_data)) {
@@ -1047,19 +1032,146 @@ class BeauBot_API_WordPress {
             return $this->get_fallback_context();
         }
 
-        // Calculer les similarités
-        $chunk_embeddings = [];
-        foreach ($chunk_data as $chunk) {
-            $chunk_embeddings[$chunk['id']] = json_decode($chunk['embedding'], true);
+        // === ÉTAPE 1 : Recherche sémantique (embeddings) ===
+        $semantic_results = [];
+        $embeddings_api = new BeauBot_API_Embeddings();
+
+        if ($embeddings_api->is_configured()) {
+            $query_embedding = $embeddings_api->generate_embedding($query);
+
+            if (!is_wp_error($query_embedding)) {
+                $chunk_embeddings = [];
+                foreach ($chunk_data as $chunk) {
+                    if (!empty($chunk['embedding'])) {
+                        $chunk_embeddings[$chunk['id']] = json_decode($chunk['embedding'], true);
+                    }
+                }
+                $semantic_results = $embeddings_api->find_most_similar($query_embedding, $chunk_embeddings, $top_k);
+                error_log("[BeauBot RAG] Semantic search: " . count($semantic_results) . " results");
+            } else {
+                error_log("[BeauBot RAG] Query embedding error: " . $query_embedding->get_error_message());
+            }
         }
 
-        $top_results = $embeddings_api->find_most_similar($query_embedding, $chunk_embeddings, $top_k);
+        // === ÉTAPE 2 : Recherche par mots-clés ===
+        $keyword_results = $this->keyword_search($chunk_data, $query, $top_k);
+        error_log("[BeauBot RAG] Keyword search: " . count($keyword_results) . " results");
+
+        // === ÉTAPE 3 : Fusion des résultats (dédoublonnage, score combiné) ===
+        $merged = $this->merge_search_results($semantic_results, $keyword_results, $top_k);
+        error_log("[BeauBot RAG] Merged results: " . count($merged) . " unique chunks");
 
         $duration = round(microtime(true) - $start, 3);
-        error_log("[BeauBot RAG] Search completed in {$duration}s, found " . count($top_results) . " relevant chunks");
+        error_log("[BeauBot RAG] Hybrid search completed in {$duration}s");
 
-        // Construire le contexte à partir des chunks trouvés
-        return $this->format_rag_context($chunk_data, $top_results, $query);
+        if (empty($merged)) {
+            error_log("[BeauBot RAG] No results found, falling back to full context");
+            return $this->get_fallback_context();
+        }
+
+        return $this->format_rag_context($chunk_data, $merged, $query);
+    }
+
+    /**
+     * Recherche par mots-clés dans les chunks.
+     * Score basé sur : nombre de termes trouvés, fréquence, correspondance exacte.
+     * 
+     * @param array $chunks Tous les chunks
+     * @param string $query Question de l'utilisateur
+     * @param int $top_k Nombre max de résultats
+     * @return array [chunk_id => score] trié par score décroissant
+     */
+    private function keyword_search(array $chunks, string $query, int $top_k): array {
+        // Extraire les termes de recherche (mots de 2+ caractères)
+        $query_lower = mb_strtolower($query, 'UTF-8');
+        $terms = preg_split('/\s+/', $query_lower);
+        $terms = array_filter($terms, fn($t) => mb_strlen($t) >= 2);
+        $terms = array_values($terms);
+
+        if (empty($terms)) {
+            return [];
+        }
+
+        // Ajouter la requête complète comme terme (pour les phrases exactes)
+        $search_phrases = [$query_lower];
+        // Ajouter aussi les termes individuels
+        $search_phrases = array_merge($search_phrases, $terms);
+        // Supprimer les doublons
+        $search_phrases = array_unique($search_phrases);
+
+        $scores = [];
+
+        foreach ($chunks as $chunk) {
+            $chunk_id = $chunk['id'];
+            $content_lower = mb_strtolower($chunk['content'], 'UTF-8');
+            $score = 0.0;
+
+            // Score pour la phrase exacte complète (bonus fort)
+            if (mb_strlen($query_lower) >= 3 && str_contains($content_lower, $query_lower)) {
+                $score += 0.5;
+            }
+
+            // Score pour chaque terme individuel
+            $terms_found = 0;
+            foreach ($terms as $term) {
+                $count = mb_substr_count($content_lower, $term);
+                if ($count > 0) {
+                    $terms_found++;
+                    // Score pondéré par la longueur du terme (les mots longs sont plus significatifs)
+                    $term_weight = min(mb_strlen($term) / 10, 1.0);
+                    $score += $term_weight * min($count / 3, 1.0); // Plafonné à 3 occurrences
+                }
+            }
+
+            // Bonus si plusieurs termes trouvés ensemble
+            if (count($terms) > 1 && $terms_found > 1) {
+                $score += ($terms_found / count($terms)) * 0.3;
+            }
+
+            if ($score > 0) {
+                // Normaliser le score entre 0 et 1
+                $scores[$chunk_id] = min($score / 2.0, 1.0);
+            }
+        }
+
+        arsort($scores);
+        return array_slice($scores, 0, $top_k, true);
+    }
+
+    /**
+     * Fusionner les résultats de la recherche sémantique et par mots-clés.
+     * Utilise le score le plus élevé de chaque source, avec un bonus si un chunk
+     * apparaît dans les deux recherches.
+     * 
+     * @param array $semantic [chunk_id => score]
+     * @param array $keyword [chunk_id => score]
+     * @param int $top_k Nombre max de résultats
+     * @return array [chunk_id => score] fusionné et trié
+     */
+    private function merge_search_results(array $semantic, array $keyword, int $top_k): array {
+        $all_ids = array_unique(array_merge(array_keys($semantic), array_keys($keyword)));
+        $merged = [];
+
+        foreach ($all_ids as $id) {
+            $sem_score = $semantic[$id] ?? 0.0;
+            $kw_score = $keyword[$id] ?? 0.0;
+
+            // Score combiné : moyenne pondérée + bonus si dans les deux
+            $combined = max($sem_score, $kw_score);
+            if ($sem_score > 0 && $kw_score > 0) {
+                // Bonus de 20% si trouvé par les deux méthodes
+                $combined = ($sem_score * 0.6 + $kw_score * 0.4) * 1.2;
+            }
+
+            $merged[$id] = min($combined, 1.0);
+        }
+
+        arsort($merged);
+
+        // Retourner plus de résultats que top_k pour permettre une meilleure couverture
+        // On prend top_k + quelques résultats keyword bonus
+        $max_results = min($top_k + 3, count($merged));
+        return array_slice($merged, 0, $max_results, true);
     }
 
     /**
@@ -1098,7 +1210,7 @@ class BeauBot_API_WordPress {
         $context = "=== INFORMATIONS DU SITE ===\n";
         $context .= "Nom: {$site_name}\n";
         $context .= "URL: {$site_url}\n\n";
-        $context .= "=== CONTENU PERTINENT (trouvé par recherche sémantique) ===\n";
+        $context .= "=== CONTENU PERTINENT (recherche hybride : sémantique + mots-clés) ===\n";
         $context .= "Question: {$query}\n";
         $context .= "Résultats: " . count($top_results) . " extraits les plus pertinents\n\n";
 
@@ -1319,7 +1431,7 @@ class BeauBot_API_WordPress {
             'total_chunks'     => $chunks_stats['total_chunks'],
             'with_embeddings'  => $chunks_stats['with_embeddings'],
             'unique_pages'     => $chunks_stats['unique_pages'],
-            'mode'             => $chunks_stats['indexed'] ? 'RAG (recherche sémantique)' : 'Fallback (contenu complet)',
+            'mode'             => $chunks_stats['indexed'] ? 'RAG hybride (sémantique + mots-clés)' : 'Fallback (contenu complet)',
             'chunk_size'       => self::CHUNK_SIZE,
             'chunk_overlap'    => self::CHUNK_OVERLAP,
             'top_k'            => self::TOP_K_RESULTS,
