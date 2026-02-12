@@ -297,7 +297,12 @@
                 html += `<span style="color: #666;">Méthode : ${source.method}</span><br>`;
                 
                 if (source.success) {
-                    html += `<span style="color: ${statusColor};">${source.count} page(s) récupérée(s)</span>`;
+                    html += `<span style="color: ${statusColor};">${source.count} élément(s) récupéré(s)</span>`;
+                    if (source.pages_count !== undefined || source.posts_count !== undefined) {
+                        const pagesCount = source.pages_count || 0;
+                        const postsCount = source.posts_count || 0;
+                        html += ` <span style="color: #666;">(${pagesCount} page(s), ${postsCount} article(s))</span>`;
+                    }
                     if (source.duration) {
                         html += ` <span style="color: #666;">en ${source.duration}</span>`;
                     }
@@ -307,30 +312,32 @@
                         const totalKb = (source.total_content_chars / 1024).toFixed(1);
                         html += `<br><strong>Contenu total :</strong> ${source.total_content_chars} caractères (${totalKb} Ko)`;
                         if (source.empty_pages > 0) {
-                            html += ` <span style="color: #b45309;">&#9888; ${source.empty_pages} page(s) vide(s)</span>`;
+                            html += ` <span style="color: #b45309;">&#9888; ${source.empty_pages} contenu(s) vide(s)</span>`;
                         }
                     }
                     
-                    // Détail par page (si disponible)
+                    // Détail par page/article (si disponible)
                     if (source.pages_detail && source.pages_detail.length > 0) {
-                        html += `<br><br><strong>Détail par page :</strong>`;
+                        html += `<br><br><strong>Détail par contenu :</strong>`;
                         html += `<table style="width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 12px;">`;
-                        html += `<tr style="background: #f0f0f0;"><th style="padding: 4px; text-align: left;">Page</th><th style="padding: 4px; text-align: right;">Contenu</th><th style="padding: 4px; text-align: left;">Aperçu</th></tr>`;
+                        html += `<tr style="background: #f0f0f0;"><th style="padding: 4px; text-align: left;">Titre</th><th style="padding: 4px; text-align: center;">Type</th><th style="padding: 4px; text-align: right;">Contenu</th><th style="padding: 4px; text-align: left;">Aperçu</th></tr>`;
                         
                         for (const page of source.pages_detail) {
                             const rowColor = page.has_content ? '' : 'background: #fef3cd;';
                             const contentStatus = page.has_content 
                                 ? `<span style="color: #059669;">${page.content_chars} car.</span>` 
                                 : `<span style="color: #dc2626;">&#10060; ${page.content_chars} car.</span>`;
+                            const typeLabel = page.type === 'post' ? '📝 Article' : '📄 Page';
                             
                             html += `<tr style="${rowColor}">`;
                             html += `<td style="padding: 4px; border-bottom: 1px solid #eee;">${BeauBotAdmin.escapeHtml(page.title)}</td>`;
+                            html += `<td style="padding: 4px; border-bottom: 1px solid #eee; text-align: center; font-size: 11px;">${typeLabel}</td>`;
                             html += `<td style="padding: 4px; border-bottom: 1px solid #eee; text-align: right;">${contentStatus}</td>`;
                             html += `<td style="padding: 4px; border-bottom: 1px solid #eee; color: #888; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${BeauBotAdmin.escapeHtml(page.preview.substring(0, 100))}</td>`;
                             html += `</tr>`;
                             
                             if (page.warning) {
-                                html += `<tr><td colspan="3" style="padding: 2px 4px; color: #b45309; font-style: italic;">&#9888; ${BeauBotAdmin.escapeHtml(page.warning)}</td></tr>`;
+                                html += `<tr><td colspan="4" style="padding: 2px 4px; color: #b45309; font-style: italic;">&#9888; ${BeauBotAdmin.escapeHtml(page.warning)}</td></tr>`;
                             }
                         }
                         html += `</table>`;

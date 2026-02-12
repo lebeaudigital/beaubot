@@ -191,11 +191,11 @@ class BeauBot_API_WordPress {
         $all_pages = $this->fetch_all_sources();
 
         if (empty($all_pages)) {
-            error_log("[BeauBot WP API] No pages returned from any source");
+            error_log("[BeauBot WP API] No content returned from any source");
             return '';
         }
 
-        error_log("[BeauBot WP API] Total pages from all sources: " . count($all_pages));
+        error_log("[BeauBot WP API] Total content from all sources: " . count($all_pages) . " items (pages + posts)");
 
         $this->build_parent_map($all_pages);
         $context = $this->format_pages_context($all_pages);
@@ -258,18 +258,18 @@ class BeauBot_API_WordPress {
             $all_pages = array_merge($all_pages, $pages);
         }
 
-        error_log("[BeauBot WP API] Total: " . count($all_pages) . " pages from all sources");
+        error_log("[BeauBot WP API] Total: " . count($all_pages) . " items (pages + posts) from all sources");
         return $all_pages;
     }
 
     /**
-     * Récupérer les pages locales via WP_Query (fiable à 100%, fonctionne dans tous les contextes)
+     * Récupérer les pages ET les articles locaux via WP_Query (fiable à 100%, fonctionne dans tous les contextes)
      * Plus fiable que rest_do_request() car ne dépend pas de l'initialisation du serveur REST.
      * 
      * @return array
      */
     private function fetch_pages_internal(): array {
-        error_log("[BeauBot WP API] Using WP_Query to fetch LOCAL pages");
+        error_log("[BeauBot WP API] Using WP_Query to fetch LOCAL pages and posts");
         
         $all_pages = [];
         $paged = 1;
@@ -277,18 +277,18 @@ class BeauBot_API_WordPress {
 
         do {
             $query = new WP_Query([
-                'post_type'      => 'page',
+                'post_type'      => ['page', 'post'],
                 'post_status'    => 'publish',
                 'posts_per_page' => $per_page,
                 'paged'          => $paged,
-                'orderby'        => 'menu_order',
-                'order'          => 'ASC',
+                'orderby'        => 'date',
+                'order'          => 'DESC',
                 'no_found_rows'  => false, // Nécessaire pour la pagination
             ]);
 
             if (!$query->have_posts()) {
                 if ($paged === 1) {
-                    error_log("[BeauBot WP API] WP_Query: No published pages found");
+                    error_log("[BeauBot WP API] WP_Query: No published pages or posts found");
                 }
                 break;
             }
@@ -304,7 +304,7 @@ class BeauBot_API_WordPress {
             wp_reset_postdata();
         } while ($paged <= $total_pages);
 
-        error_log("[BeauBot WP API] WP_Query total: " . count($all_pages) . " pages");
+        error_log("[BeauBot WP API] WP_Query total: " . count($all_pages) . " pages and posts");
         return $all_pages;
     }
 
@@ -325,6 +325,7 @@ class BeauBot_API_WordPress {
             'parent'     => $post->post_parent,
             'slug'       => $post->post_name,
             'menu_order' => $post->menu_order,
+            'type'       => $post->post_type,
         ];
     }
 
@@ -336,65 +337,89 @@ class BeauBot_API_WordPress {
     private function fetch_pages_external(string $api_base_url): array|WP_Error {
         error_log("[BeauBot WP API] Using EXTERNAL HTTP call to: {$api_base_url}");
         
-        $all_pages = [];
-        $page_num = 1;
-        $per_page = 100;
+        $all_items = [];
 
-        do {
-            $url = $api_base_url . '/pages?' . http_build_query([
-                'per_page' => $per_page,
-                'page'     => $page_num,
-                'status'   => 'publish',
-                'orderby'  => 'menu_order',
-                'order'    => 'asc',
-                '_fields'  => 'id,title,content,link,parent,slug,menu_order',
-            ]);
+        // Récupérer les pages ET les articles depuis l'API externe
+        $endpoints = ['pages', 'posts'];
 
-            error_log("[BeauBot WP API] Fetching page {$page_num}: {$url}");
+        foreach ($endpoints as $endpoint) {
+            $page_num = 1;
+            $per_page = 100;
 
-            $response = wp_remote_get($url, [
-                'timeout'    => 30,
-                'sslverify'  => false,
-                'user-agent' => 'BeauBot/' . BEAUBOT_VERSION . ' (WordPress Plugin)',
-                'headers'    => [
-                    'Accept' => 'application/json',
-                ],
-            ]);
+            do {
+                $query_params = [
+                    'per_page' => $per_page,
+                    'page'     => $page_num,
+                    'status'   => 'publish',
+                    '_fields'  => 'id,title,content,link,parent,slug,menu_order,type',
+                ];
 
-            if (is_wp_error($response)) {
-                error_log("[BeauBot WP API] HTTP Error: " . $response->get_error_message());
-                return $response;
-            }
+                // Tri par menu_order pour les pages, par date pour les articles
+                if ($endpoint === 'pages') {
+                    $query_params['orderby'] = 'menu_order';
+                    $query_params['order'] = 'asc';
+                } else {
+                    $query_params['orderby'] = 'date';
+                    $query_params['order'] = 'desc';
+                }
 
-            $status_code = wp_remote_retrieve_response_code($response);
-            if ($status_code !== 200) {
+                $url = $api_base_url . '/' . $endpoint . '?' . http_build_query($query_params);
+
+                error_log("[BeauBot WP API] Fetching {$endpoint} page {$page_num}: {$url}");
+
+                $response = wp_remote_get($url, [
+                    'timeout'    => 30,
+                    'sslverify'  => false,
+                    'user-agent' => 'BeauBot/' . BEAUBOT_VERSION . ' (WordPress Plugin)',
+                    'headers'    => [
+                        'Accept' => 'application/json',
+                    ],
+                ]);
+
+                if (is_wp_error($response)) {
+                    error_log("[BeauBot WP API] HTTP Error for {$endpoint}: " . $response->get_error_message());
+                    break; // Passer au prochain endpoint au lieu d'échouer complètement
+                }
+
+                $status_code = wp_remote_retrieve_response_code($response);
+                if ($status_code !== 200) {
+                    $body = wp_remote_retrieve_body($response);
+                    error_log("[BeauBot WP API] API returned status {$status_code} for {$endpoint}: {$body}");
+                    break; // Passer au prochain endpoint
+                }
+
                 $body = wp_remote_retrieve_body($response);
-                error_log("[BeauBot WP API] API returned status {$status_code}: {$body}");
-                return new WP_Error(
-                    'wp_api_error',
-                    sprintf(__('L\'API WordPress (%s) a retourné le code %d', 'beaubot'), $api_base_url, $status_code)
-                );
-            }
+                $items = json_decode($body, true);
 
-            $body = wp_remote_retrieve_body($response);
-            $pages = json_decode($body, true);
+                if (!is_array($items)) {
+                    error_log("[BeauBot WP API] Invalid JSON response for {$endpoint}");
+                    break;
+                }
 
-            if (!is_array($pages)) {
-                error_log("[BeauBot WP API] Invalid JSON response");
-                return new WP_Error('wp_api_error', __('Réponse JSON invalide de l\'API WordPress', 'beaubot'));
-            }
+                // Ajouter le type pour les items qui ne l'ont pas
+                foreach ($items as &$item) {
+                    if (!isset($item['type'])) {
+                        $item['type'] = ($endpoint === 'pages') ? 'page' : 'post';
+                    }
+                }
+                unset($item);
 
-            $all_pages = array_merge($all_pages, $pages);
+                $all_items = array_merge($all_items, $items);
 
-            // Vérifier s'il y a d'autres pages
-            $total_pages = (int) wp_remote_retrieve_header($response, 'x-wp-totalpages');
-            
-            error_log("[BeauBot WP API] Page {$page_num}/{$total_pages}, got " . count($pages) . " items");
+                // Vérifier s'il y a d'autres pages
+                $total_pages = (int) wp_remote_retrieve_header($response, 'x-wp-totalpages');
+                
+                error_log("[BeauBot WP API] {$endpoint} page {$page_num}/{$total_pages}, got " . count($items) . " items");
 
-            $page_num++;
-        } while ($page_num <= $total_pages);
+                $page_num++;
+            } while ($page_num <= $total_pages);
+        }
 
-        return $all_pages;
+        if (empty($all_items)) {
+            return new WP_Error('wp_api_error', __('Aucun contenu récupéré depuis l\'API externe', 'beaubot'));
+        }
+
+        return $all_items;
     }
 
     /**
@@ -610,12 +635,14 @@ class BeauBot_API_WordPress {
         if (empty($pages)) {
             // Diagnostic détaillé en cas d'échec
             $diagnostics['local_pages_count'] = wp_count_posts('page')->publish ?? 0;
+            $diagnostics['local_posts_count'] = wp_count_posts('post')->publish ?? 0;
             
             return [
                 'success'     => false,
                 'message'     => sprintf(
-                    __('Aucune page récupérée. %d pages publiées existent sur ce site. Vérifiez les URLs des API.', 'beaubot'),
-                    $diagnostics['local_pages_count']
+                    __('Aucun contenu récupéré. %d pages et %d articles publiés existent sur ce site. Vérifiez les URLs des API.', 'beaubot'),
+                    $diagnostics['local_pages_count'],
+                    $diagnostics['local_posts_count']
                 ),
                 'diagnostics' => $diagnostics,
             ];
@@ -659,12 +686,14 @@ class BeauBot_API_WordPress {
      */
     public function get_cache_stats(): array {
         $cached = get_transient(self::CACHE_KEY);
-        $local_published = wp_count_posts('page')->publish ?? 0;
+        $local_pages_published = wp_count_posts('page')->publish ?? 0;
+        $local_posts_published = wp_count_posts('post')->publish ?? 0;
 
         $base = [
             'api_urls'        => $this->api_base_urls,
             'sources_count'   => count($this->api_base_urls),
-            'local_pages'     => (int) $local_published,
+            'local_pages'     => (int) $local_pages_published,
+            'local_posts'     => (int) $local_posts_published,
             'home_url'        => home_url(),
         ];
 
@@ -853,17 +882,17 @@ class BeauBot_API_WordPress {
             'errors'           => [],
         ];
 
-        // Étape 1 : Récupérer toutes les pages
-        error_log("[BeauBot RAG] Step 1: Fetching all pages...");
+        // Étape 1 : Récupérer toutes les pages et articles
+        error_log("[BeauBot RAG] Step 1: Fetching all pages and posts...");
         $all_pages = $this->fetch_all_sources();
 
         if (empty($all_pages)) {
-            $results['errors'][] = 'Aucune page récupérée.';
+            $results['errors'][] = 'Aucun contenu récupéré (pages et articles).';
             return $results;
         }
 
         $results['pages_fetched'] = count($all_pages);
-        error_log("[BeauBot RAG] Fetched " . count($all_pages) . " pages");
+        error_log("[BeauBot RAG] Fetched " . count($all_pages) . " items (pages + posts)");
 
         // Construire la map des parents pour les breadcrumbs
         $this->build_parent_map($all_pages);
@@ -1315,25 +1344,35 @@ class BeauBot_API_WordPress {
             'sources'         => [],
         ];
 
-        // Test 1 : Contenu local via WP_Query
+        // Test 1 : Contenu local via WP_Query (pages + articles)
         $start = microtime(true);
         $local_pages = $this->fetch_pages_internal();
         $duration = round(microtime(true) - $start, 3);
 
-        // Analyser le contenu de chaque page locale pour détecter les pages vides
+        // Analyser le contenu de chaque élément local pour détecter les contenus vides
         $pages_detail = [];
         $total_content_chars = 0;
         $empty_pages_count = 0;
+        $local_pages_count = 0;
+        $local_posts_count = 0;
 
         foreach ($local_pages as $page) {
             $title = $page['title']['rendered'] ?? '(sans titre)';
+            $type = $page['type'] ?? 'page';
             $raw_content = $page['content']['rendered'] ?? '';
             $clean_content = $this->clean_html_content($raw_content);
             $content_length = strlen($clean_content);
             $total_content_chars += $content_length;
 
+            if ($type === 'post') {
+                $local_posts_count++;
+            } else {
+                $local_pages_count++;
+            }
+
             $detail = [
                 'title'          => $title,
+                'type'           => $type,
                 'content_chars'  => $content_length,
                 'has_content'    => $content_length > 50,
                 'preview'        => $content_length > 0 
@@ -1354,9 +1393,11 @@ class BeauBot_API_WordPress {
         }
 
         $results['sources']['local'] = [
-            'method'              => 'WP_Query',
+            'method'              => 'WP_Query (pages + posts)',
             'success'             => !empty($local_pages),
             'count'               => count($local_pages),
+            'pages_count'         => $local_pages_count,
+            'posts_count'         => $local_posts_count,
             'duration'            => $duration . 's',
             'total_content_chars' => $total_content_chars,
             'empty_pages'         => $empty_pages_count,
