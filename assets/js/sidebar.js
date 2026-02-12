@@ -21,6 +21,16 @@
         this.createElements();
         this.bindEvents();
         this.loadUserPreference();
+        this.restoreOpenState();
+    };
+
+    /**
+     * Restaurer l'état ouvert/fermé depuis localStorage
+     */
+    BeauBotSidebar.prototype.restoreOpenState = function() {
+        if (localStorage.getItem('beaubot_sidebar_open') === 'true') {
+            this.open();
+        }
     };
 
     BeauBotSidebar.prototype.createElements = function() {
@@ -121,6 +131,8 @@
         if (this.toggleButton) this.toggleButton.classList.add('beaubot-hidden');
         if (this.overlay) this.overlay.classList.add('beaubot-visible');
         
+        localStorage.setItem('beaubot_sidebar_open', 'true');
+        
         var input = this.container.querySelector('.beaubot-input');
         if (input) {
             setTimeout(function() { input.focus(); }, 300);
@@ -136,6 +148,8 @@
         this.container.classList.remove('beaubot-open');
         if (this.toggleButton) this.toggleButton.classList.remove('beaubot-hidden');
         if (this.overlay) this.overlay.classList.remove('beaubot-visible');
+
+        localStorage.setItem('beaubot_sidebar_open', 'false');
 
         this.dispatchEvent('close');
     };

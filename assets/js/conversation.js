@@ -200,6 +200,7 @@
 
     BeauBotConversation.prototype.createNew = function() {
         this.currentConversationId = null;
+        localStorage.removeItem('beaubot_conversation_id');
         this.dispatchEvent('newConversation');
         
         if (this.isHistoryOpen) {
@@ -316,6 +317,7 @@
     BeauBotConversation.prototype.setCurrentId = function(id) {
         this.currentConversationId = id;
         if (id) {
+            localStorage.setItem('beaubot_conversation_id', id);
             this.updateActiveItem(id);
         }
     };

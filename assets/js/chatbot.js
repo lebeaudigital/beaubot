@@ -48,8 +48,13 @@
         // Lier les événements
         this.bindEvents();
         
-        // Message de bienvenue
-        this.showWelcomeMessage();
+        // Restaurer la conversation sauvegardée ou afficher le message de bienvenue
+        var savedConversationId = localStorage.getItem('beaubot_conversation_id');
+        if (savedConversationId) {
+            this.conversation.loadConversation(parseInt(savedConversationId));
+        } else {
+            this.showWelcomeMessage();
+        }
     };
 
     BeauBot.prototype.bindEvents = function() {
