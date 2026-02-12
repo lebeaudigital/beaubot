@@ -77,7 +77,7 @@ class BeauBot_API_ChatGPT {
         $response = $this->make_request('/chat/completions', [
             'model' => $this->model,
             'messages' => $api_messages,
-            'max_tokens' => (int) ($this->options['max_tokens'] ?? 1000),
+            'max_tokens' => (int) ($this->options['max_tokens'] ?? 2000),
             'temperature' => (float) ($this->options['temperature'] ?? 0.7),
         ]);
 
@@ -207,41 +207,75 @@ class BeauBot_API_ChatGPT {
     }
 
     /**
-     * Effectuer une requête à l'API OpenAI
+     * Nombre maximum de tentatives pour les erreurs 429 (rate limit)
+     */
+    private const MAX_RETRIES = 2;
+
+    /**
+     * Effectuer une requête à l'API OpenAI avec retry automatique sur erreur 429
      * @param string $endpoint
      * @param array $body
      * @return array|WP_Error
      */
     private function make_request(string $endpoint, array $body): array|WP_Error {
         $url = self::API_BASE_URL . $endpoint;
+        $last_error = null;
 
-        $response = wp_remote_post($url, [
-            'timeout' => 60,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $this->api_key,
-                'Content-Type' => 'application/json',
-            ],
-            'body' => wp_json_encode($body),
-        ]);
+        for ($attempt = 0; $attempt <= self::MAX_RETRIES; $attempt++) {
+            // Attendre avant de réessayer (backoff exponentiel)
+            if ($attempt > 0) {
+                $wait = min(pow(2, $attempt), 8); // 2s, 4s max
+                error_log("[BeauBot ChatGPT] Rate limit hit, retry {$attempt}/" . self::MAX_RETRIES . " after {$wait}s");
+                sleep($wait);
+            }
 
-        if (is_wp_error($response)) {
-            return new WP_Error(
-                'api_error',
-                sprintf(__('Erreur de connexion à l\'API: %s', 'beaubot'), $response->get_error_message())
-            );
-        }
+            $response = wp_remote_post($url, [
+                'timeout' => 90,
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->api_key,
+                    'Content-Type' => 'application/json',
+                ],
+                'body' => wp_json_encode($body),
+            ]);
 
-        $status_code = wp_remote_retrieve_response_code($response);
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+            if (is_wp_error($response)) {
+                return new WP_Error(
+                    'api_error',
+                    sprintf(__('Erreur de connexion à l\'API: %s', 'beaubot'), $response->get_error_message())
+                );
+            }
 
-        if ($status_code !== 200) {
+            $status_code = wp_remote_retrieve_response_code($response);
+            $response_body = wp_remote_retrieve_body($response);
+            $data = json_decode($response_body, true);
+
+            // Succès
+            if ($status_code === 200) {
+                return $data;
+            }
+
+            // Rate limit (429) : réessayer automatiquement
+            if ($status_code === 429 && $attempt < self::MAX_RETRIES) {
+                $last_error = $data;
+                // Vérifier si OpenAI fournit un header Retry-After
+                $retry_after = wp_remote_retrieve_header($response, 'retry-after');
+                if ($retry_after && is_numeric($retry_after) && (int) $retry_after <= 30) {
+                    error_log("[BeauBot ChatGPT] OpenAI Retry-After header: {$retry_after}s");
+                    sleep((int) $retry_after);
+                }
+                continue;
+            }
+
+            // Autre erreur ou dernière tentative 429
             $error_message = $data['error']['message'] ?? __('Erreur inconnue', 'beaubot');
-            
+
+            // Log détaillé pour le debug
+            error_log("[BeauBot ChatGPT] API error {$status_code}: {$error_message}");
+
             // Messages d'erreur personnalisés
             $error_messages = [
                 401 => __('Clé API invalide ou expirée.', 'beaubot'),
-                429 => __('Limite de requêtes atteinte. Réessayez plus tard.', 'beaubot'),
+                429 => __('Limite de requêtes OpenAI atteinte. Vérifiez votre quota sur platform.openai.com. Réessayez dans quelques secondes.', 'beaubot'),
                 500 => __('Erreur serveur OpenAI. Réessayez plus tard.', 'beaubot'),
                 503 => __('Service OpenAI temporairement indisponible.', 'beaubot'),
             ];
@@ -256,7 +290,8 @@ class BeauBot_API_ChatGPT {
             ]);
         }
 
-        return $data;
+        // Ne devrait jamais arriver, mais par sécurité
+        return new WP_Error('api_error', __('Limite de requêtes OpenAI atteinte après plusieurs tentatives.', 'beaubot'));
     }
 
     /**

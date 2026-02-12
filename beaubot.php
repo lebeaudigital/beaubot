@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.0.10
+ * Version: 1.0.11
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.0.10');
+define('BEAUBOT_VERSION', '1.0.11');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -198,13 +198,20 @@ class BeauBot {
             'api_key' => '',
             'model' => 'gpt-4o',
             'sidebar_position' => 'right',
-            'max_tokens' => 1000,
+            'max_tokens' => 2000,
             'temperature' => 0.7,
             'system_prompt' => __('Tu es un assistant virtuel pour ce site web. Tu réponds aux questions en te basant sur le contenu du site.', 'beaubot'),
         ];
         
         if (!get_option('beaubot_settings')) {
             add_option('beaubot_settings', $default_options);
+        } else {
+            // Migration : mettre à jour max_tokens si encore à l'ancienne valeur par défaut
+            $existing = get_option('beaubot_settings');
+            if (isset($existing['max_tokens']) && (int) $existing['max_tokens'] === 1000) {
+                $existing['max_tokens'] = 2000;
+                update_option('beaubot_settings', $existing);
+            }
         }
         
         // Flush rewrite rules

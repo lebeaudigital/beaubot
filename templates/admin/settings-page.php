@@ -168,17 +168,17 @@ if (!defined('ABSPATH')) {
                         <label for="beaubot_max_tokens"><?php esc_html_e('Tokens maximum', 'beaubot'); ?></label>
                     </th>
                     <td>
-                        <?php $max_tokens = $options['max_tokens'] ?? 1000; ?>
+                        <?php $max_tokens = $options['max_tokens'] ?? 2000; ?>
                         <input type="number" 
                                id="beaubot_max_tokens" 
                                name="beaubot_settings[max_tokens]" 
                                value="<?php echo esc_attr($max_tokens); ?>" 
                                min="100" 
-                               max="4000" 
+                               max="16384" 
                                step="100"
                                class="small-text">
                         <p class="description">
-                            <?php esc_html_e('Longueur maximale des réponses (100-4000 tokens).', 'beaubot'); ?>
+                            <?php esc_html_e('Longueur maximale des réponses (100-16384 tokens). Recommandé : 2000+.', 'beaubot'); ?>
                         </p>
                     </td>
                 </tr>

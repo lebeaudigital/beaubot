@@ -264,7 +264,7 @@ class BeauBot_Admin {
             'bot_name' => 'BeauBot',
             'primary_color' => '#6366f1',
             'sidebar_position' => 'right',
-            'max_tokens' => 1000,
+            'max_tokens' => 2000,
             'temperature' => 0.7,
             'system_prompt' => __('Tu es un assistant virtuel pour ce site web. Tu réponds aux questions en te basant sur le contenu du site.', 'beaubot'),
             'wp_api_urls' => ['https://ifip.lebeaudigital.fr/memento/wp-json/wp/v2'],
@@ -291,12 +291,12 @@ class BeauBot_Admin {
             : 'right';
         
         // Paramètres avancés
-        $sanitized['max_tokens'] = absint($input['max_tokens'] ?? 1000);
+        $sanitized['max_tokens'] = absint($input['max_tokens'] ?? 2000);
         $sanitized['temperature'] = floatval($input['temperature'] ?? 0.7);
         $sanitized['system_prompt'] = sanitize_textarea_field($input['system_prompt'] ?? '');
         
-        // Valider les limites
-        $sanitized['max_tokens'] = max(100, min(4000, $sanitized['max_tokens']));
+        // Valider les limites (GPT-4o supporte jusqu'à 16384 tokens en sortie)
+        $sanitized['max_tokens'] = max(100, min(16384, $sanitized['max_tokens']));
         $sanitized['temperature'] = max(0, min(2, $sanitized['temperature']));
         
         // URLs des API WordPress
@@ -470,18 +470,18 @@ class BeauBot_Admin {
 
     public function render_max_tokens_field(): void {
         $options = get_option(self::OPTION_NAME);
-        $value = $options['max_tokens'] ?? 1000;
+        $value = $options['max_tokens'] ?? 2000;
         ?>
         <input type="number" 
                id="beaubot_max_tokens" 
                name="<?php echo esc_attr(self::OPTION_NAME); ?>[max_tokens]" 
                value="<?php echo esc_attr($value); ?>" 
                min="100" 
-               max="4000" 
+               max="16384" 
                step="100"
                class="small-text">
         <p class="description">
-            <?php esc_html_e('Nombre maximum de tokens pour les réponses (100-4000).', 'beaubot'); ?>
+            <?php esc_html_e('Nombre maximum de tokens pour les réponses (100-16384). Recommandé : 2000+.', 'beaubot'); ?>
         </p>
         <?php
     }
