@@ -101,6 +101,18 @@ class BeauBot_Frontend {
         $user = wp_get_current_user();
         $bot_name = $this->options['bot_name'] ?? 'BeauBot';
         
+        // Préparer les profils utilisateur (seulement ceux avec un label)
+        $user_profiles = $this->options['user_profiles'] ?? [];
+        $profiles_for_js = [];
+        foreach ($user_profiles as $profile) {
+            if (!empty($profile['label'])) {
+                $profiles_for_js[] = [
+                    'label' => $profile['label'],
+                    'level' => $profile['level'] ?? 'beginner',
+                ];
+            }
+        }
+        
         return [
             'restUrl' => rest_url('beaubot/v1/'),
             'nonce' => wp_create_nonce('wp_rest'),
@@ -111,6 +123,8 @@ class BeauBot_Frontend {
             'sidebarPosition' => $this->options['sidebar_position'] ?? 'right',
             'maxFileSize' => wp_max_upload_size(),
             'allowedMimeTypes' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+            'userProfiles' => $profiles_for_js,
+            'profileQuestion' => $this->options['profile_question'] ?? __('Quel est votre profil ?', 'beaubot'),
             'strings' => [
                 'placeholder' => __('Posez votre question...', 'beaubot'),
                 'send' => __('Envoyer', 'beaubot'),

@@ -222,6 +222,78 @@ if (!defined('ABSPATH')) {
             </table>
         </div>
 
+        <!-- Section Profils Utilisateur -->
+        <div class="beaubot-card">
+            <h2><?php esc_html_e('Profils de conversation', 'beaubot'); ?></h2>
+            <p class="description"><?php esc_html_e('Définissez jusqu\'à 5 profils proposés au début de chaque conversation. Chaque profil oriente le niveau de détail des réponses.', 'beaubot'); ?></p>
+            
+            <table class="form-table">
+                <tr>
+                    <th scope="row">
+                        <label><?php esc_html_e('Question affichée', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <?php $profile_question = $options['profile_question'] ?? 'Quel est votre profil ?'; ?>
+                        <input type="text" 
+                               id="beaubot_profile_question" 
+                               name="beaubot_settings[profile_question]" 
+                               value="<?php echo esc_attr($profile_question); ?>" 
+                               class="regular-text"
+                               placeholder="<?php esc_attr_e('Quel est votre profil ?', 'beaubot'); ?>">
+                        <p class="description">
+                            <?php esc_html_e('La question posée à l\'utilisateur au début de la conversation.', 'beaubot'); ?>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label><?php esc_html_e('Profils', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <?php 
+                        $user_profiles = $options['user_profiles'] ?? [];
+                        $placeholders = [
+                            __('Étudiant', 'beaubot'),
+                            __('Ingénieur', 'beaubot'),
+                            __('Éleveur', 'beaubot'),
+                            __('Technicien', 'beaubot'),
+                            __('Chercheur', 'beaubot'),
+                        ];
+                        for ($i = 0; $i < 5; $i++): 
+                            $label = $user_profiles[$i]['label'] ?? '';
+                            $level = $user_profiles[$i]['level'] ?? 'beginner';
+                        ?>
+                            <div class="beaubot-profile-row" style="display: flex; align-items: center; margin-bottom: 8px; gap: 10px;">
+                                <span style="color: #666; min-width: 20px;"><?php echo ($i + 1); ?>.</span>
+                                <input type="text" 
+                                       name="beaubot_settings[user_profiles][<?php echo $i; ?>][label]" 
+                                       value="<?php echo esc_attr($label); ?>" 
+                                       class="regular-text"
+                                       placeholder="<?php echo esc_attr($placeholders[$i]); ?>"
+                                       style="max-width: 200px;">
+                                <select name="beaubot_settings[user_profiles][<?php echo $i; ?>][level]" style="min-width: 140px;">
+                                    <option value="beginner" <?php selected($level, 'beginner'); ?>>
+                                        <?php esc_html_e('Essentiel', 'beaubot'); ?>
+                                    </option>
+                                    <option value="expert" <?php selected($level, 'expert'); ?>>
+                                        <?php esc_html_e('Approfondi', 'beaubot'); ?>
+                                    </option>
+                                </select>
+                                <?php if (!empty($label)): ?>
+                                    <span class="beaubot-profile-badge" style="padding: 2px 8px; border-radius: 10px; font-size: 11px; <?php echo $level === 'expert' ? 'background: #dbeafe; color: #1e40af;' : 'background: #dcfce7; color: #166534;'; ?>">
+                                        <?php echo $level === 'expert' ? esc_html__('Approfondi', 'beaubot') : esc_html__('Essentiel', 'beaubot'); ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                        <?php endfor; ?>
+                        <p class="description" style="margin-top: 10px;">
+                            <?php esc_html_e('Laissez le champ vide pour ne pas afficher le profil. Les profils « Essentiel » donnent des réponses concises, les profils « Approfondi » donnent des réponses détaillées et structurées.', 'beaubot'); ?>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
         <!-- Section Sources API WordPress -->
         <div class="beaubot-card">
             <h2><?php esc_html_e('Sources de contenu (API WordPress)', 'beaubot'); ?></h2>

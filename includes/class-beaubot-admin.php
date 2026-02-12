@@ -308,6 +308,28 @@ class BeauBot_Admin {
         $sanitized['max_tokens'] = max(100, min(16384, $sanitized['max_tokens']));
         $sanitized['temperature'] = max(0, min(2, $sanitized['temperature']));
         
+        // Question des profils
+        $sanitized['profile_question'] = sanitize_text_field($input['profile_question'] ?? 'Quel est votre profil ?');
+        
+        // Profils utilisateur (max 5)
+        $raw_profiles = $input['user_profiles'] ?? [];
+        $sanitized['user_profiles'] = [];
+        if (is_array($raw_profiles)) {
+            for ($i = 0; $i < 5; $i++) {
+                $label = sanitize_text_field($raw_profiles[$i]['label'] ?? '');
+                $level = in_array($raw_profiles[$i]['level'] ?? '', ['beginner', 'expert']) 
+                    ? $raw_profiles[$i]['level'] 
+                    : 'beginner';
+                
+                if (!empty($label)) {
+                    $sanitized['user_profiles'][] = [
+                        'label' => $label,
+                        'level' => $level,
+                    ];
+                }
+            }
+        }
+        
         // URLs des API WordPress
         $raw_urls = $input['wp_api_urls'] ?? [];
         $sanitized['wp_api_urls'] = [];

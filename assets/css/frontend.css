@@ -430,6 +430,65 @@
 }
 
 /* ========================================
+   Profile Selection
+   ======================================== */
+
+.beaubot-profile-question {
+    margin-bottom: 12px !important;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--beaubot-text);
+}
+
+.beaubot-profile-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.beaubot-profile-btn {
+    padding: 8px 18px;
+    border: 2px solid var(--beaubot-primary);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--beaubot-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--beaubot-transition);
+    font-family: inherit;
+}
+
+.beaubot-profile-btn:hover:not(:disabled) {
+    background: var(--beaubot-primary);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.beaubot-profile-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.beaubot-profile-btn.beaubot-profile-selected {
+    background: var(--beaubot-primary);
+    color: white;
+    border-color: var(--beaubot-primary);
+    cursor: default;
+}
+
+.beaubot-profile-btn.beaubot-profile-dimmed {
+    opacity: 0.35;
+    cursor: default;
+    border-color: var(--beaubot-border);
+    color: var(--beaubot-text-muted);
+}
+
+.beaubot-profile-btn:disabled {
+    cursor: default;
+}
+
+/* ========================================
    Typing Indicator
    ======================================== */
 

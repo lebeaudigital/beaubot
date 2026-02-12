@@ -56,19 +56,21 @@ class BeauBot_API_ChatGPT {
      * @param array $messages Historique des messages
      * @param string|null $image_base64 Image en base64 (optionnel)
      * @param string|null $site_context Contexte du site (optionnel)
+     * @param string|null $user_profile_level Niveau de profil utilisateur ('beginner' ou 'expert')
      * @return array|WP_Error
      */
     public function send_message(
         array $messages, 
         ?string $image_base64 = null, 
-        ?string $site_context = null
+        ?string $site_context = null,
+        ?string $user_profile_level = null
     ): array|WP_Error {
         if (!$this->is_configured()) {
             return new WP_Error('not_configured', __('L\'API ChatGPT n\'est pas configurée.', 'beaubot'));
         }
 
         // Construire le prompt système
-        $system_prompt = $this->build_system_prompt($site_context);
+        $system_prompt = $this->build_system_prompt($site_context, $user_profile_level);
 
         // Préparer les messages pour l'API
         $api_messages = $this->prepare_messages($messages, $system_prompt, $image_base64);
@@ -100,9 +102,10 @@ class BeauBot_API_ChatGPT {
     /**
      * Construire le prompt système
      * @param string|null $site_context
+     * @param string|null $user_profile_level
      * @return string
      */
-    private function build_system_prompt(?string $site_context): string {
+    private function build_system_prompt(?string $site_context, ?string $user_profile_level = null): string {
         $site_name = get_bloginfo('name');
         
         $base_prompt = $this->options['system_prompt'] ?? '';
@@ -110,15 +113,30 @@ class BeauBot_API_ChatGPT {
         $prompt = "Tu es l'assistant pédagogique du site \"{$site_name}\". ";
         $prompt .= "Tu expliques comme un professeur bienveillant qui aide ses étudiants à comprendre.\n\n";
         
-        $prompt .= "RÈGLES ABSOLUES:\n";
-        $prompt .= "- SOIS CONCIS : 3 à 5 phrases maximum pour une réponse standard. Va droit à l'essentiel.\n";
-        $prompt .= "- Explique simplement, avec un langage clair et accessible.\n";
-        $prompt .= "- Un seul paragraphe d'explication + la source à la fin.\n";
-        $prompt .= "- Si l'utilisateur veut plus de détails, il demandera — ne donne pas tout d'un coup.\n";
-        $prompt .= "- Termine par la page source pour approfondir.\n";
-        $prompt .= "- Réponds en français.\n";
-        $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
-        $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";
+        // Adapter les règles selon le niveau de profil
+        if ($user_profile_level === 'expert') {
+            $prompt .= "NIVEAU DE RÉPONSE : APPROFONDI (profil expert)\n";
+            $prompt .= "RÈGLES ABSOLUES:\n";
+            $prompt .= "- Fournis une réponse DÉTAILLÉE et STRUCTURÉE avec des sous-titres si pertinent.\n";
+            $prompt .= "- Utilise un vocabulaire technique et précis adapté à un professionnel.\n";
+            $prompt .= "- Organise ta réponse avec des listes à puces, des étapes numérotées ou des tableaux si nécessaire.\n";
+            $prompt .= "- Ajoute des explications complémentaires, des nuances et des cas particuliers.\n";
+            $prompt .= "- Cite les sources et pages de référence dans ta réponse.\n";
+            $prompt .= "- Réponds en français.\n";
+            $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
+            $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";
+        } else {
+            $prompt .= "NIVEAU DE RÉPONSE : ESSENTIEL (profil débutant)\n";
+            $prompt .= "RÈGLES ABSOLUES:\n";
+            $prompt .= "- SOIS CONCIS : 3 à 5 phrases maximum pour une réponse standard. Va droit à l'essentiel.\n";
+            $prompt .= "- Explique simplement, avec un langage clair et accessible.\n";
+            $prompt .= "- Un seul paragraphe d'explication + la source à la fin.\n";
+            $prompt .= "- Si l'utilisateur veut plus de détails, il demandera — ne donne pas tout d'un coup.\n";
+            $prompt .= "- Termine par la page source pour approfondir.\n";
+            $prompt .= "- Réponds en français.\n";
+            $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
+            $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";
+        }
         
         if (!empty($base_prompt)) {
             $prompt .= "\nInstructions supplémentaires du propriétaire du site:\n{$base_prompt}\n";

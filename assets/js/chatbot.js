@@ -12,6 +12,7 @@
         this.fileUpload = null;
         this.conversation = null;
         this.isLoading = false;
+        this.userProfile = null; // Profil sélectionné par l'utilisateur
         
         this.messagesContainer = null;
         this.inputField = null;
@@ -48,6 +49,16 @@
         // Lier les événements
         this.bindEvents();
         
+        // Restaurer le profil utilisateur si déjà choisi
+        var savedProfile = localStorage.getItem('beaubot_user_profile');
+        if (savedProfile) {
+            try {
+                this.userProfile = JSON.parse(savedProfile);
+            } catch (e) {
+                this.userProfile = null;
+            }
+        }
+
         // Restaurer la conversation sauvegardée ou afficher le message de bienvenue
         var savedConversationId = localStorage.getItem('beaubot_conversation_id');
         if (savedConversationId) {
@@ -129,6 +140,11 @@
             body.image = imageData;
         }
 
+        // Ajouter le profil utilisateur si sélectionné
+        if (this.userProfile) {
+            body.user_profile_level = this.userProfile.level;
+        }
+
         fetch(this.config.restUrl + 'chat', {
             method: 'POST',
             headers: {
@@ -202,16 +218,102 @@
     BeauBot.prototype.showWelcomeMessage = function() {
         var botName = this.config.botName || 'BeauBot';
         var welcomeMessage = 'Bonjour ' + this.config.userName + ' ! 👋\n\n' +
-            'Je suis ' + botName + ', votre assistant IA. Je peux répondre à vos questions sur le contenu de ce site.\n\n' +
-            'Comment puis-je vous aider aujourd\'hui ?';
+            'Je suis ' + botName + ', votre assistant IA. Je peux répondre à vos questions sur le contenu de ce site.';
 
         this.addMessage('assistant', welcomeMessage);
+
+        // Afficher les profils si configurés
+        var profiles = this.config.userProfiles || [];
+        if (profiles.length > 0 && !this.userProfile) {
+            this.showProfileSelection();
+        }
+    };
+
+    /**
+     * Afficher la sélection de profil
+     */
+    BeauBot.prototype.showProfileSelection = function() {
+        if (!this.messagesContainer) return;
+
+        var self = this;
+        var profiles = this.config.userProfiles || [];
+        if (profiles.length === 0) return;
+
+        var profileQuestion = this.config.profileQuestion || 'Quel est votre profil ?';
+
+        var containerEl = document.createElement('div');
+        containerEl.className = 'beaubot-message beaubot-assistant beaubot-profile-selection';
+
+        var avatar = '<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>';
+
+        var buttonsHtml = '';
+        for (var i = 0; i < profiles.length; i++) {
+            buttonsHtml += '<button type="button" class="beaubot-profile-btn" data-profile-index="' + i + '" data-profile-level="' + this.escapeHtml(profiles[i].level) + '">' + 
+                this.escapeHtml(profiles[i].label) + 
+            '</button>';
+        }
+
+        containerEl.innerHTML = 
+            '<div class="beaubot-avatar">' + avatar + '</div>' +
+            '<div class="beaubot-message-content">' +
+                '<div class="beaubot-message-text">' +
+                    '<p class="beaubot-profile-question">' + this.escapeHtml(profileQuestion) + '</p>' +
+                    '<div class="beaubot-profile-buttons">' + buttonsHtml + '</div>' +
+                '</div>' +
+            '</div>';
+
+        this.messagesContainer.appendChild(containerEl);
+        this.scrollToBottom();
+
+        // Lier les événements des boutons
+        var buttons = containerEl.querySelectorAll('.beaubot-profile-btn');
+        for (var j = 0; j < buttons.length; j++) {
+            buttons[j].addEventListener('click', function() {
+                var index = parseInt(this.getAttribute('data-profile-index'));
+                self.selectProfile(index);
+            });
+        }
+    };
+
+    /**
+     * Sélectionner un profil
+     */
+    BeauBot.prototype.selectProfile = function(index) {
+        var profiles = this.config.userProfiles || [];
+        if (index < 0 || index >= profiles.length) return;
+
+        this.userProfile = profiles[index];
+
+        // Stocker dans le localStorage pour cette session
+        localStorage.setItem('beaubot_user_profile', JSON.stringify(this.userProfile));
+
+        // Désactiver les boutons et marquer le choix
+        var selectionEl = this.messagesContainer.querySelector('.beaubot-profile-selection');
+        if (selectionEl) {
+            var buttons = selectionEl.querySelectorAll('.beaubot-profile-btn');
+            for (var i = 0; i < buttons.length; i++) {
+                buttons[i].disabled = true;
+                if (parseInt(buttons[i].getAttribute('data-profile-index')) === index) {
+                    buttons[i].classList.add('beaubot-profile-selected');
+                } else {
+                    buttons[i].classList.add('beaubot-profile-dimmed');
+                }
+            }
+        }
+
+        // Message de confirmation
+        var confirmMsg = 'Parfait ! Je vais adapter mes réponses à votre profil. Comment puis-je vous aider ?';
+        this.addMessage('assistant', confirmMsg);
     };
 
     BeauBot.prototype.handleNewConversation = function() {
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
         }
+        // Réinitialiser le profil pour la nouvelle conversation
+        this.userProfile = null;
+        localStorage.removeItem('beaubot_user_profile');
+        
         this.showWelcomeMessage();
     };
 

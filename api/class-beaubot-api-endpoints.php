@@ -62,6 +62,12 @@ class BeauBot_API_Endpoints {
                     'required' => false,
                     'type' => 'string',
                 ],
+                'user_profile_level' => [
+                    'required' => false,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'enum' => ['beginner', 'expert'],
+                ],
             ],
         ]);
 
@@ -239,6 +245,7 @@ class BeauBot_API_Endpoints {
         $message = $request->get_param('message');
         $conversation_id = $request->get_param('conversation_id');
         $image_data = $request->get_param('image');
+        $user_profile_level = $request->get_param('user_profile_level');
 
         $conversation_handler = new BeauBot_Conversation();
         $image_handler = new BeauBot_Image();
@@ -321,8 +328,8 @@ class BeauBot_API_Endpoints {
             error_log("[BeauBot] After refresh: " . (empty($site_context) ? "STILL EMPTY!" : strlen($site_context) . " chars"));
         }
 
-        // Envoyer à ChatGPT
-        $response = $chatgpt->send_message($messages, $image_base64, $site_context);
+        // Envoyer à ChatGPT avec le niveau de profil
+        $response = $chatgpt->send_message($messages, $image_base64, $site_context, $user_profile_level);
 
         if (is_wp_error($response)) {
             return $response;
