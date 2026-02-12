@@ -33,11 +33,31 @@ class BeauBot_API_WordPress {
     private const CACHE_KEY = 'beaubot_wp_api_pages_cache';
 
     /**
-     * Nombre maximum de tokens pour le contexte
-     * GPT-4o supporte 128K tokens, on utilise 60K pour laisser de la place
-     * au system prompt, à l'historique de conversation et à la réponse.
+     * Nombre maximum de tokens pour le contexte en mode fallback (sans RAG)
+     * Utilisé uniquement quand aucun chunk n'est indexé en BDD.
      */
     private const MAX_CONTEXT_TOKENS = 60000;
+
+    /**
+     * Nombre maximum de tokens pour le contexte RAG
+     * En mode RAG, on envoie uniquement les chunks pertinents (~5-10K tokens).
+     */
+    private const RAG_MAX_CONTEXT_TOKENS = 8000;
+
+    /**
+     * Taille d'un chunk en caractères
+     */
+    private const CHUNK_SIZE = 1500;
+
+    /**
+     * Chevauchement entre les chunks en caractères
+     */
+    private const CHUNK_OVERLAP = 200;
+
+    /**
+     * Nombre de chunks les plus pertinents à retourner
+     */
+    private const TOP_K_RESULTS = 5;
 
     /**
      * Map des IDs parents pour la hiérarchie
@@ -135,27 +155,38 @@ class BeauBot_API_WordPress {
     }
 
     /**
-     * Obtenir le contexte du site pour ChatGPT via l'API WordPress
-     * @param string|null $query Question de l'utilisateur (réservé pour usage futur)
+     * Obtenir le contexte du site pour ChatGPT.
+     * 
+     * Mode RAG (si chunks indexés en BDD) : recherche sémantique des chunks pertinents.
+     * Mode Fallback (sinon) : envoie tout le contenu (ancien comportement).
+     * 
+     * @param string|null $query Question de l'utilisateur pour la recherche RAG
      * @return string
      */
     public function get_site_context(?string $query = null): string {
-        error_log("[BeauBot WP API] get_site_context called");
+        error_log("[BeauBot WP API] get_site_context called" . ($query ? " with query: " . substr($query, 0, 100) : ""));
 
-        // Vérifier le cache (avec validation : le cache doit contenir du vrai contenu)
+        // === MODE RAG : si des chunks sont indexés et qu'on a une question ===
+        if (!empty($query) && $this->has_indexed_chunks()) {
+            error_log("[BeauBot WP API] Using RAG mode (indexed chunks available)");
+            return $this->search_relevant_chunks($query);
+        }
+
+        // === MODE FALLBACK : ancien comportement (tout le contenu) ===
+        error_log("[BeauBot WP API] Using FALLBACK mode (no indexed chunks or no query)");
+
+        // Vérifier le cache
         $cached = get_transient(self::CACHE_KEY);
         if ($cached !== false && strlen($cached) > 500) {
             error_log("[BeauBot WP API] Using cached context (" . strlen($cached) . " chars)");
             return $this->truncate_context($cached);
         }
         
-        // Si le cache existe mais est trop petit, le supprimer (cache invalide/vide)
         if ($cached !== false) {
             error_log("[BeauBot WP API] Cache found but too small (" . strlen($cached) . " chars), clearing...");
             delete_transient(self::CACHE_KEY);
         }
 
-        // Récupérer les pages de toutes les sources
         $all_pages = $this->fetch_all_sources();
 
         if (empty($all_pages)) {
@@ -165,18 +196,12 @@ class BeauBot_API_WordPress {
 
         error_log("[BeauBot WP API] Total pages from all sources: " . count($all_pages));
 
-        // Construire la map des parents pour la hiérarchie
         $this->build_parent_map($all_pages);
-
-        // Formater le contenu
         $context = $this->format_pages_context($all_pages);
 
-        // Ne cacher que si le contenu est substantiel
         if (strlen($context) > 500) {
             set_transient(self::CACHE_KEY, $context, self::CACHE_DURATION);
             error_log("[BeauBot WP API] Context cached: " . strlen($context) . " chars");
-        } else {
-            error_log("[BeauBot WP API] Context too small to cache: " . strlen($context) . " chars");
         }
 
         return $this->truncate_context($context);
@@ -656,6 +681,512 @@ class BeauBot_API_WordPress {
         ]);
     }
 
+    // =========================================================================
+    // MÉTHODES RAG (Retrieval-Augmented Generation)
+    // =========================================================================
+
+    /**
+     * Obtenir le nom de la table des chunks
+     * @return string
+     */
+    private function get_chunks_table(): string {
+        global $wpdb;
+        return $wpdb->prefix . 'beaubot_content_chunks';
+    }
+
+    /**
+     * Vérifier si des chunks indexés avec embeddings existent en BDD
+     * @return bool
+     */
+    public function has_indexed_chunks(): bool {
+        global $wpdb;
+        $table = $this->get_chunks_table();
+        
+        // Vérifier que la table existe
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return false;
+        }
+        
+        $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE embedding IS NOT NULL");
+        return $count > 0;
+    }
+
+    /**
+     * Obtenir les statistiques des chunks indexés
+     * @return array
+     */
+    public function get_chunks_stats(): array {
+        global $wpdb;
+        $table = $this->get_chunks_table();
+        
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return [
+                'total_chunks'     => 0,
+                'with_embeddings'  => 0,
+                'unique_pages'     => 0,
+                'indexed'          => false,
+            ];
+        }
+
+        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+        $with_embeddings = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE embedding IS NOT NULL");
+        $unique_pages = (int) $wpdb->get_var("SELECT COUNT(DISTINCT page_id) FROM {$table}");
+
+        return [
+            'total_chunks'     => $total,
+            'with_embeddings'  => $with_embeddings,
+            'unique_pages'     => $unique_pages,
+            'indexed'          => $with_embeddings > 0,
+        ];
+    }
+
+    /**
+     * Découper un texte en chunks avec chevauchement
+     * @param string $text Texte à découper
+     * @param int $size Taille de chaque chunk en caractères
+     * @param int $overlap Chevauchement entre chunks en caractères
+     * @return array Tableau de strings (chunks)
+     */
+    public function chunk_text(string $text, int $size = self::CHUNK_SIZE, int $overlap = self::CHUNK_OVERLAP): array {
+        $text = trim($text);
+        
+        if (empty($text)) {
+            return [];
+        }
+
+        // Si le texte est plus court que la taille d'un chunk, retourner tel quel
+        if (strlen($text) <= $size) {
+            return [$text];
+        }
+
+        $chunks = [];
+        $start = 0;
+        $text_length = strlen($text);
+
+        while ($start < $text_length) {
+            $end = $start + $size;
+
+            if ($end >= $text_length) {
+                // Dernier chunk : prendre tout le reste
+                $chunks[] = substr($text, $start);
+                break;
+            }
+
+            // Essayer de couper à un retour à la ligne ou une fin de phrase
+            $chunk = substr($text, $start, $size);
+            $cut_pos = $this->find_best_cut_position($chunk);
+            
+            if ($cut_pos > 0) {
+                $chunks[] = substr($text, $start, $cut_pos);
+                $start += $cut_pos - $overlap;
+            } else {
+                $chunks[] = $chunk;
+                $start += $size - $overlap;
+            }
+
+            // Éviter les boucles infinies
+            if ($start <= 0) {
+                $start = $size;
+            }
+        }
+
+        return $chunks;
+    }
+
+    /**
+     * Trouver la meilleure position de coupure dans un texte
+     * Préfère couper à : fin de paragraphe > fin de phrase > fin de mot
+     * @param string $text
+     * @return int Position de coupure (0 si non trouvée)
+     */
+    private function find_best_cut_position(string $text): int {
+        $len = strlen($text);
+        $min_pos = (int) ($len * 0.6); // Ne pas couper trop tôt
+
+        // Chercher un retour à la ligne (fin de paragraphe)
+        $pos = strrpos($text, "\n\n");
+        if ($pos !== false && $pos > $min_pos) {
+            return $pos + 2;
+        }
+
+        // Chercher un retour à la ligne simple
+        $pos = strrpos($text, "\n");
+        if ($pos !== false && $pos > $min_pos) {
+            return $pos + 1;
+        }
+
+        // Chercher un point suivi d'un espace (fin de phrase)
+        $pos = strrpos($text, '. ');
+        if ($pos !== false && $pos > $min_pos) {
+            return $pos + 2;
+        }
+
+        // Chercher un espace (fin de mot)
+        $pos = strrpos($text, ' ');
+        if ($pos !== false && $pos > $min_pos) {
+            return $pos + 1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Pipeline complet d'indexation du contenu pour le RAG.
+     * 
+     * 1. Récupère toutes les pages (locales + externes)
+     * 2. Découpe chaque page en chunks
+     * 3. Génère les embeddings via l'API OpenAI
+     * 4. Stocke les chunks + embeddings en BDD
+     * 
+     * @return array Résultat détaillé de l'indexation
+     */
+    public function index_content(): array {
+        $start = microtime(true);
+        $results = [
+            'success'          => false,
+            'pages_fetched'    => 0,
+            'chunks_created'   => 0,
+            'embeddings_generated' => 0,
+            'errors'           => [],
+        ];
+
+        // Étape 1 : Récupérer toutes les pages
+        error_log("[BeauBot RAG] Step 1: Fetching all pages...");
+        $all_pages = $this->fetch_all_sources();
+
+        if (empty($all_pages)) {
+            $results['errors'][] = 'Aucune page récupérée.';
+            return $results;
+        }
+
+        $results['pages_fetched'] = count($all_pages);
+        error_log("[BeauBot RAG] Fetched " . count($all_pages) . " pages");
+
+        // Construire la map des parents pour les breadcrumbs
+        $this->build_parent_map($all_pages);
+        $titles_by_id = [];
+        foreach ($all_pages as $page) {
+            $titles_by_id[$page['id'] ?? 0] = html_entity_decode($page['title']['rendered'] ?? '', ENT_QUOTES, 'UTF-8');
+        }
+
+        // Étape 2 : Découper en chunks
+        error_log("[BeauBot RAG] Step 2: Chunking pages...");
+        $all_chunks = []; // [['page_id' => ..., 'page_title' => ..., 'page_url' => ..., 'parent_title' => ..., 'content' => ..., 'chunk_index' => ..., 'source_api' => ...]]
+
+        foreach ($all_pages as $page) {
+            $page_id = $page['id'] ?? 0;
+            $title = html_entity_decode($page['title']['rendered'] ?? 'Sans titre', ENT_QUOTES, 'UTF-8');
+            $url = $page['link'] ?? '';
+            $raw_content = $page['content']['rendered'] ?? '';
+            $source = $page['_source_api'] ?? 'local';
+            $parent_id = $page['parent'] ?? 0;
+            $parent_title = ($parent_id && isset($titles_by_id[$parent_id])) ? $titles_by_id[$parent_id] : null;
+
+            // Nettoyer le contenu HTML
+            $clean = $this->clean_html_content($raw_content);
+
+            if (empty($clean) || strlen($clean) < 50) {
+                error_log("[BeauBot RAG] Skipping page '{$title}' (empty or too short)");
+                continue;
+            }
+
+            // Construire le breadcrumb
+            $breadcrumb = $this->build_breadcrumb($page, $titles_by_id);
+
+            // Découper en chunks
+            $text_chunks = $this->chunk_text($clean);
+
+            foreach ($text_chunks as $idx => $chunk_content) {
+                // Préfixer chaque chunk avec le contexte de la page
+                $prefix = "Page: {$title}";
+                if (!empty($breadcrumb)) {
+                    $prefix .= " | Section: {$breadcrumb}";
+                }
+                $prefix .= "\nURL: {$url}\n\n";
+
+                $full_chunk = $prefix . $chunk_content;
+                $content_hash = md5($full_chunk);
+
+                $all_chunks[] = [
+                    'page_id'      => $page_id,
+                    'page_title'   => $title,
+                    'page_url'     => $url,
+                    'parent_title' => $parent_title,
+                    'content'      => $full_chunk,
+                    'content_hash' => $content_hash,
+                    'chunk_index'  => $idx,
+                    'source_api'   => $source,
+                ];
+            }
+        }
+
+        $results['chunks_created'] = count($all_chunks);
+        error_log("[BeauBot RAG] Created " . count($all_chunks) . " chunks from " . count($all_pages) . " pages");
+
+        if (empty($all_chunks)) {
+            $results['errors'][] = 'Aucun chunk créé (contenu vide ?).';
+            return $results;
+        }
+
+        // Étape 3 : Générer les embeddings
+        error_log("[BeauBot RAG] Step 3: Generating embeddings...");
+        $embeddings_api = new BeauBot_API_Embeddings();
+
+        if (!$embeddings_api->is_configured()) {
+            $results['errors'][] = 'Clé API OpenAI non configurée. Les embeddings n\'ont pas été générés.';
+            // On stocke quand même les chunks sans embeddings
+            $this->store_chunks($all_chunks, []);
+            $results['duration'] = round(microtime(true) - $start, 2);
+            return $results;
+        }
+
+        // Extraire les textes pour le batch embedding
+        $texts = array_map(fn($c) => $c['content'], $all_chunks);
+        $embeddings = $embeddings_api->generate_embeddings($texts);
+
+        if (is_wp_error($embeddings)) {
+            $results['errors'][] = 'Erreur embeddings: ' . $embeddings->get_error_message();
+            error_log("[BeauBot RAG] Embeddings error: " . $embeddings->get_error_message());
+            // Stocker les chunks sans embeddings
+            $this->store_chunks($all_chunks, []);
+            $results['duration'] = round(microtime(true) - $start, 2);
+            return $results;
+        }
+
+        $results['embeddings_generated'] = count($embeddings);
+        error_log("[BeauBot RAG] Generated " . count($embeddings) . " embeddings");
+
+        // Étape 4 : Stocker en BDD
+        error_log("[BeauBot RAG] Step 4: Storing chunks in database...");
+        $this->store_chunks($all_chunks, $embeddings);
+
+        // Vider l'ancien cache transient (plus nécessaire en mode RAG)
+        $this->clear_cache();
+
+        $results['success'] = true;
+        $results['duration'] = round(microtime(true) - $start, 2);
+
+        error_log("[BeauBot RAG] Indexation complete: {$results['chunks_created']} chunks, {$results['embeddings_generated']} embeddings in {$results['duration']}s");
+
+        return $results;
+    }
+
+    /**
+     * Stocker les chunks (et embeddings) en BDD
+     * Supprime les anciens chunks avant d'insérer les nouveaux.
+     * 
+     * @param array $chunks Tableau de chunks
+     * @param array $embeddings Tableau d'embeddings (même ordre que $chunks)
+     */
+    private function store_chunks(array $chunks, array $embeddings): void {
+        global $wpdb;
+        $table = $this->get_chunks_table();
+
+        // Supprimer tous les anciens chunks
+        $wpdb->query("TRUNCATE TABLE {$table}");
+
+        foreach ($chunks as $i => $chunk) {
+            $embedding_json = isset($embeddings[$i]) ? wp_json_encode($embeddings[$i]) : null;
+
+            $wpdb->insert($table, [
+                'page_id'      => $chunk['page_id'],
+                'page_title'   => $chunk['page_title'],
+                'page_url'     => $chunk['page_url'],
+                'parent_title' => $chunk['parent_title'],
+                'chunk_index'  => $chunk['chunk_index'],
+                'content'      => $chunk['content'],
+                'content_hash' => $chunk['content_hash'],
+                'embedding'    => $embedding_json,
+                'source_api'   => $chunk['source_api'],
+                'created_at'   => current_time('mysql'),
+            ], [
+                '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s',
+            ]);
+        }
+
+        error_log("[BeauBot RAG] Stored " . count($chunks) . " chunks in database");
+    }
+
+    /**
+     * Rechercher les chunks les plus pertinents pour une question (mode RAG).
+     * 
+     * 1. Génère un embedding pour la question
+     * 2. Charge tous les embeddings des chunks depuis la BDD
+     * 3. Calcule la similarité cosinus
+     * 4. Retourne le contexte formaté avec les top K chunks
+     * 
+     * @param string $query Question de l'utilisateur
+     * @param int $top_k Nombre de résultats (défaut: TOP_K_RESULTS)
+     * @return string Contexte formaté pour ChatGPT
+     */
+    public function search_relevant_chunks(string $query, int $top_k = self::TOP_K_RESULTS): string {
+        $start = microtime(true);
+
+        $embeddings_api = new BeauBot_API_Embeddings();
+
+        if (!$embeddings_api->is_configured()) {
+            error_log("[BeauBot RAG] API key not configured, falling back to full context");
+            return $this->get_fallback_context();
+        }
+
+        // Générer l'embedding de la question
+        $query_embedding = $embeddings_api->generate_embedding($query);
+
+        if (is_wp_error($query_embedding)) {
+            error_log("[BeauBot RAG] Query embedding error: " . $query_embedding->get_error_message());
+            return $this->get_fallback_context();
+        }
+
+        // Charger tous les chunks avec embeddings depuis la BDD
+        $chunk_data = $this->load_chunks_with_embeddings();
+
+        if (empty($chunk_data)) {
+            error_log("[BeauBot RAG] No chunks with embeddings found in database");
+            return $this->get_fallback_context();
+        }
+
+        // Calculer les similarités
+        $chunk_embeddings = [];
+        foreach ($chunk_data as $chunk) {
+            $chunk_embeddings[$chunk['id']] = json_decode($chunk['embedding'], true);
+        }
+
+        $top_results = $embeddings_api->find_most_similar($query_embedding, $chunk_embeddings, $top_k);
+
+        $duration = round(microtime(true) - $start, 3);
+        error_log("[BeauBot RAG] Search completed in {$duration}s, found " . count($top_results) . " relevant chunks");
+
+        // Construire le contexte à partir des chunks trouvés
+        return $this->format_rag_context($chunk_data, $top_results, $query);
+    }
+
+    /**
+     * Charger tous les chunks avec embeddings depuis la BDD
+     * @return array
+     */
+    private function load_chunks_with_embeddings(): array {
+        global $wpdb;
+        $table = $this->get_chunks_table();
+
+        return $wpdb->get_results(
+            "SELECT id, page_id, page_title, page_url, parent_title, chunk_index, content, embedding 
+             FROM {$table} 
+             WHERE embedding IS NOT NULL",
+            ARRAY_A
+        ) ?: [];
+    }
+
+    /**
+     * Formater le contexte RAG à partir des chunks pertinents
+     * @param array $all_chunks Tous les chunks chargés (avec metadata)
+     * @param array $top_results Résultats triés [chunk_id => score]
+     * @param string $query Question originale
+     * @return string
+     */
+    private function format_rag_context(array $all_chunks, array $top_results, string $query): string {
+        $site_name = get_bloginfo('name');
+        $site_url = home_url();
+
+        // Indexer les chunks par ID pour accès rapide
+        $chunks_by_id = [];
+        foreach ($all_chunks as $chunk) {
+            $chunks_by_id[$chunk['id']] = $chunk;
+        }
+
+        $context = "=== INFORMATIONS DU SITE ===\n";
+        $context .= "Nom: {$site_name}\n";
+        $context .= "URL: {$site_url}\n\n";
+        $context .= "=== CONTENU PERTINENT (trouvé par recherche sémantique) ===\n";
+        $context .= "Question: {$query}\n";
+        $context .= "Résultats: " . count($top_results) . " extraits les plus pertinents\n\n";
+
+        $rank = 1;
+        foreach ($top_results as $chunk_id => $score) {
+            if (!isset($chunks_by_id[$chunk_id])) {
+                continue;
+            }
+
+            $chunk = $chunks_by_id[$chunk_id];
+            $relevance = round($score * 100, 1);
+
+            $context .= "--- Extrait {$rank} (pertinence: {$relevance}%) ---\n";
+            $context .= $chunk['content'] . "\n\n";
+
+            $rank++;
+        }
+
+        $context .= "=== FIN DU CONTENU PERTINENT ===\n";
+
+        // Tronquer si nécessaire pour respecter la limite RAG
+        $tokens = $this->estimate_tokens($context);
+        error_log("[BeauBot RAG] Context: " . strlen($context) . " chars, ~{$tokens} tokens (limit: " . self::RAG_MAX_CONTEXT_TOKENS . ")");
+
+        if ($tokens > self::RAG_MAX_CONTEXT_TOKENS) {
+            $max_chars = self::RAG_MAX_CONTEXT_TOKENS * 4;
+            $context = substr($context, 0, $max_chars);
+            // Couper proprement
+            $last_newline = strrpos($context, "\n");
+            if ($last_newline !== false && $last_newline > $max_chars * 0.8) {
+                $context = substr($context, 0, $last_newline);
+            }
+            $context .= "\n\n[Contenu tronqué pour respecter les limites]\n";
+            error_log("[BeauBot RAG] Context truncated to " . strlen($context) . " chars");
+        }
+
+        return $context;
+    }
+
+    /**
+     * Obtenir le contexte en mode fallback (tout le contenu, ancien comportement)
+     * Utilisé quand le RAG n'est pas disponible.
+     * @return string
+     */
+    private function get_fallback_context(): string {
+        $cached = get_transient(self::CACHE_KEY);
+        if ($cached !== false && strlen($cached) > 500) {
+            return $this->truncate_context($cached);
+        }
+
+        $all_pages = $this->fetch_all_sources();
+        if (empty($all_pages)) {
+            return '';
+        }
+
+        $this->build_parent_map($all_pages);
+        $context = $this->format_pages_context($all_pages);
+
+        if (strlen($context) > 500) {
+            set_transient(self::CACHE_KEY, $context, self::CACHE_DURATION);
+        }
+
+        return $this->truncate_context($context);
+    }
+
+    /**
+     * Vider les chunks indexés de la BDD
+     * @return int Nombre de chunks supprimés
+     */
+    public function clear_chunks(): int {
+        global $wpdb;
+        $table = $this->get_chunks_table();
+        
+        $table_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table));
+        if (!$table_exists) {
+            return 0;
+        }
+        
+        $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+        $wpdb->query("TRUNCATE TABLE {$table}");
+        error_log("[BeauBot RAG] Cleared {$count} chunks from database");
+        return $count;
+    }
+
+    // =========================================================================
+    // DIAGNOSTICS
+    // =========================================================================
+
     /**
      * Exécuter un diagnostic complet des sources API
      * Utile pour débugger les problèmes de récupération de contenu.
@@ -781,22 +1312,37 @@ class BeauBot_API_WordPress {
                 : '(vide)',
         ];
 
-        // Test 4 : Simuler get_site_context() pour vérifier le résultat final
-        // Vider le cache d'abord pour forcer un rechargement frais
-        delete_transient(self::CACHE_KEY);
-        $context = $this->get_site_context('test diagnostic');
-        $results['context_test'] = [
-            'length'        => strlen($context),
-            'tokens_est'    => $this->estimate_tokens($context),
-            'max_tokens'    => self::MAX_CONTEXT_TOKENS,
-            'max_chars_page' => 8000,
-            'is_truncated'  => $this->estimate_tokens($context) >= self::MAX_CONTEXT_TOKENS * 0.95,
-            'preview_start' => mb_substr($context, 0, 300) . '...',
-            'preview_end'   => '...' . mb_substr($context, -300),
-            'has_content'   => strlen($context) > 500,
+        // Test 4 : État du RAG (chunks et embeddings)
+        $chunks_stats = $this->get_chunks_stats();
+        $results['rag'] = [
+            'indexed'          => $chunks_stats['indexed'],
+            'total_chunks'     => $chunks_stats['total_chunks'],
+            'with_embeddings'  => $chunks_stats['with_embeddings'],
+            'unique_pages'     => $chunks_stats['unique_pages'],
+            'mode'             => $chunks_stats['indexed'] ? 'RAG (recherche sémantique)' : 'Fallback (contenu complet)',
+            'chunk_size'       => self::CHUNK_SIZE,
+            'chunk_overlap'    => self::CHUNK_OVERLAP,
+            'top_k'            => self::TOP_K_RESULTS,
         ];
 
-        // Test 5 : Vérifier si des termes spécifiques sont dans le contexte final
+        // Test 5 : Simuler get_site_context() pour vérifier le résultat
+        delete_transient(self::CACHE_KEY);
+        $test_query = 'test diagnostic CIA génétique';
+        $context = $this->get_site_context($test_query);
+        $max_tokens = $chunks_stats['indexed'] ? self::RAG_MAX_CONTEXT_TOKENS : self::MAX_CONTEXT_TOKENS;
+        $results['context_test'] = [
+            'mode'          => $chunks_stats['indexed'] ? 'RAG' : 'Fallback',
+            'query'         => $test_query,
+            'length'        => strlen($context),
+            'tokens_est'    => $this->estimate_tokens($context),
+            'max_tokens'    => $max_tokens,
+            'is_truncated'  => $this->estimate_tokens($context) >= $max_tokens * 0.95,
+            'preview_start' => mb_substr($context, 0, 300) . '...',
+            'preview_end'   => '...' . mb_substr($context, -300),
+            'has_content'   => strlen($context) > 100,
+        ];
+
+        // Test 6 : Vérifier si des termes spécifiques sont dans le contexte final
         $test_terms = ['CIA', 'environnement', 'génétique', 'GEEP', 'lisier'];
         $term_check = [];
         foreach ($test_terms as $term) {

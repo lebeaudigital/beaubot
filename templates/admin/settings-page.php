@@ -268,38 +268,48 @@ if (!defined('ABSPATH')) {
         <?php submit_button(__('Enregistrer les modifications', 'beaubot')); ?>
     </form>
 
-    <!-- Section Cache API WordPress -->
+    <!-- Section Indexation du contenu (RAG) -->
     <div class="beaubot-card">
-        <h2><?php esc_html_e('Cache du contenu', 'beaubot'); ?></h2>
-        <p class="description"><?php esc_html_e('Le chatbot récupère le contenu des pages via les API REST WordPress configurées ci-dessus. Le cache se rafraîchit automatiquement toutes les heures.', 'beaubot'); ?></p>
+        <h2><?php esc_html_e('Indexation du contenu', 'beaubot'); ?></h2>
+        <p class="description"><?php esc_html_e('Le chatbot utilise la recherche sémantique (RAG) pour trouver les passages les plus pertinents par rapport à chaque question. Cliquez sur "Indexer le contenu" après avoir ajouté ou modifié des pages.', 'beaubot'); ?></p>
         
         <?php
         $wp_api = new BeauBot_API_WordPress();
         $stats = $wp_api->get_cache_stats();
+        $chunks_stats = $wp_api->get_chunks_stats();
         ?>
         
         <table class="form-table">
             <tr>
-                <th scope="row"><?php esc_html_e('Statut du cache', 'beaubot'); ?></th>
+                <th scope="row"><?php esc_html_e('Statut', 'beaubot'); ?></th>
                 <td>
                     <div id="beaubot-index-status">
-                        <?php if ($stats['cached']): ?>
+                        <?php if ($chunks_stats['indexed']): ?>
                             <span class="beaubot-status beaubot-status-success">
-                                <?php esc_html_e('Cache actif', 'beaubot'); ?>
+                                <?php esc_html_e('RAG actif (recherche sémantique)', 'beaubot'); ?>
                             </span>
                             <ul style="margin-top: 10px; color: #666;">
-                                <li><strong><?php esc_html_e('Taille:', 'beaubot'); ?></strong> <?php echo esc_html($stats['size']); ?> Ko</li>
-                                <li><strong><?php esc_html_e('Sources:', 'beaubot'); ?></strong> <?php echo esc_html($stats['sources_count']); ?> API(s) configurée(s)</li>
+                                <li><strong><?php esc_html_e('Pages indexées:', 'beaubot'); ?></strong> <?php echo esc_html($chunks_stats['unique_pages']); ?></li>
+                                <li><strong><?php esc_html_e('Chunks:', 'beaubot'); ?></strong> <?php echo esc_html($chunks_stats['total_chunks']); ?></li>
+                                <li><strong><?php esc_html_e('Embeddings:', 'beaubot'); ?></strong> <?php echo esc_html($chunks_stats['with_embeddings']); ?></li>
+                                <li><strong><?php esc_html_e('Sources:', 'beaubot'); ?></strong> <?php echo esc_html($stats['sources_count']); ?> API(s)</li>
                                 <li><strong><?php esc_html_e('Pages locales publiées:', 'beaubot'); ?></strong> <?php echo esc_html($stats['local_pages']); ?></li>
                             </ul>
-                        <?php else: ?>
+                        <?php elseif ($stats['cached']): ?>
                             <span class="beaubot-status beaubot-status-warning">
-                                <?php esc_html_e('Aucun cache', 'beaubot'); ?>
+                                <?php esc_html_e('Mode fallback (contenu complet)', 'beaubot'); ?>
                             </span>
                             <p style="color: #b45309; margin-top: 10px;">
+                                <?php esc_html_e('Le contenu est envoyé en entier à ChatGPT. Cliquez sur "Indexer le contenu" pour activer la recherche sémantique (RAG) et améliorer les performances.', 'beaubot'); ?>
+                            </p>
+                        <?php else: ?>
+                            <span class="beaubot-status beaubot-status-error">
+                                <?php esc_html_e('Non indexé', 'beaubot'); ?>
+                            </span>
+                            <p style="color: #dc2626; margin-top: 10px;">
                                 <?php 
                                 printf(
-                                    esc_html__('%d pages publiées détectées sur ce site. Cliquez sur "Rafraîchir le cache" pour récupérer le contenu.', 'beaubot'),
+                                    esc_html__('%d pages publiées détectées. Cliquez sur "Indexer le contenu" pour démarrer.', 'beaubot'),
                                     $stats['local_pages']
                                 );
                                 ?>
@@ -312,8 +322,8 @@ if (!defined('ABSPATH')) {
                 <th scope="row"><?php esc_html_e('Actions', 'beaubot'); ?></th>
                 <td>
                     <button type="button" class="button button-primary" id="beaubot-reindex">
-                        <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
-                        <?php esc_html_e('Rafraîchir le cache', 'beaubot'); ?>
+                        <span class="dashicons dashicons-database-import" style="margin-top: 3px;"></span>
+                        <?php esc_html_e('Indexer le contenu', 'beaubot'); ?>
                     </button>
                     <button type="button" class="button" id="beaubot-diagnostics" style="margin-left: 8px;">
                         <span class="dashicons dashicons-search" style="margin-top: 3px;"></span>
@@ -321,7 +331,7 @@ if (!defined('ABSPATH')) {
                     </button>
                     <span id="beaubot-reindex-status" style="margin-left: 10px;"></span>
                     <p class="description" style="margin-top: 10px;">
-                        <?php esc_html_e('Le cache se met à jour automatiquement toutes les heures. Le diagnostic permet de vérifier chaque source individuellement.', 'beaubot'); ?>
+                        <?php esc_html_e('L\'indexation récupère les pages, les découpe en morceaux et génère des embeddings pour la recherche sémantique. Relancez-la après avoir modifié le contenu de votre site.', 'beaubot'); ?>
                     </p>
                 </td>
             </tr>
@@ -330,7 +340,7 @@ if (!defined('ABSPATH')) {
         <!-- Résultats du diagnostic (caché par défaut) -->
         <div id="beaubot-diagnostics-results" style="display: none; margin-top: 15px;">
             <h3 style="margin-bottom: 10px;"><?php esc_html_e('Résultats du diagnostic', 'beaubot'); ?></h3>
-            <div id="beaubot-diagnostics-content" style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 4px; padding: 15px; font-family: monospace; font-size: 13px; max-height: 400px; overflow-y: auto;"></div>
+            <div id="beaubot-diagnostics-content" style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 4px; padding: 15px; font-family: monospace; font-size: 13px; max-height: 600px; overflow-y: auto;"></div>
         </div>
     </div>
 

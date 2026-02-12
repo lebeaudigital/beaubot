@@ -101,7 +101,8 @@ class BeauBot_Admin {
     }
 
     /**
-     * Rafraîchir le cache du contenu via l'API WordPress REST (AJAX)
+     * Indexer le contenu avec RAG (chunks + embeddings) via AJAX
+     * Remplace l'ancien système de cache simple.
      */
     public function ajax_reindex(): void {
         check_ajax_referer('beaubot_admin_nonce', 'nonce');
@@ -111,12 +112,20 @@ class BeauBot_Admin {
         }
         
         $wp_api = new BeauBot_API_WordPress();
-        $result = $wp_api->force_refresh();
+        $result = $wp_api->index_content();
         
         if ($result['success']) {
             wp_send_json_success($result);
         } else {
-            wp_send_json_error($result);
+            // Si l'indexation RAG échoue, tenter un refresh classique en fallback
+            $fallback = $wp_api->force_refresh();
+            if ($fallback['success']) {
+                $fallback['rag_fallback'] = true;
+                $fallback['rag_errors'] = $result['errors'] ?? [];
+                wp_send_json_success($fallback);
+            } else {
+                wp_send_json_error(array_merge($result, ['fallback_tried' => true]));
+            }
         }
     }
 

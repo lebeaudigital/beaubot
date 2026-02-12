@@ -158,49 +158,73 @@
         },
 
         /**
-         * Rafraîchir le cache du contenu
+         * Indexer le contenu (RAG : chunks + embeddings)
          */
         reindexContent() {
             const button = $(this);
             const status = $('#beaubot-reindex-status');
             const originalHtml = button.html();
             
-            button.prop('disabled', true).html('<span class="dashicons dashicons-update spinning"></span> Chargement en cours...');
-            status.html('<span style="color: #666;">Récupération via l\'API WordPress...</span>');
+            button.prop('disabled', true).html('<span class="dashicons dashicons-update spinning"></span> Indexation en cours...');
+            status.html('<span style="color: #666;">Récupération des pages, découpage en chunks et génération des embeddings...</span>');
 
             $.ajax({
                 url: beaubotAdmin.ajaxUrl,
                 type: 'POST',
+                timeout: 300000, // 5 minutes (les embeddings peuvent prendre du temps)
                 data: {
                     action: 'beaubot_reindex',
                     nonce: beaubotAdmin.nonce
                 },
                 success(response) {
                     if (response.success) {
-                        status.html('<span style="color: #059669;">' + response.data.message + '</span>');
-                        BeauBotAdmin.showNotice('success', 'Cache rafraîchi avec succès !');
+                        const data = response.data;
+                        const isRag = data.chunks_created !== undefined;
                         
-                        // Mettre à jour l'affichage des stats
-                        const sourcesInfo = response.data.sources > 1 
-                            ? `<li><strong>Sources:</strong> ${response.data.sources} API(s)</li>` 
-                            : '';
-                        $('#beaubot-index-status').html(`
-                            <span class="beaubot-status beaubot-status-success">Cache actif</span>
-                            <ul style="margin-top: 10px; color: #666;">
-                                <li><strong>Pages récupérées:</strong> ${response.data.count}</li>
-                                ${sourcesInfo}
-                                <li><strong>Taille:</strong> ${response.data.size} Ko</li>
-                                <li><strong>Chargé en:</strong> ${response.data.duration}s</li>
-                            </ul>
-                        `);
+                        if (isRag && !data.rag_fallback) {
+                            // Mode RAG réussi
+                            const errorsHtml = (data.errors && data.errors.length > 0) 
+                                ? `<li style="color: #b45309;"><strong>Avertissements:</strong> ${data.errors.join(', ')}</li>` 
+                                : '';
+                            
+                            status.html(`<span style="color: #059669;">Indexation RAG terminée en ${data.duration}s</span>`);
+                            BeauBotAdmin.showNotice('success', `Indexation réussie : ${data.chunks_created} chunks, ${data.embeddings_generated} embeddings`);
+                            
+                            $('#beaubot-index-status').html(`
+                                <span class="beaubot-status beaubot-status-success">RAG actif (recherche sémantique)</span>
+                                <ul style="margin-top: 10px; color: #666;">
+                                    <li><strong>Pages indexées:</strong> ${data.pages_fetched}</li>
+                                    <li><strong>Chunks:</strong> ${data.chunks_created}</li>
+                                    <li><strong>Embeddings:</strong> ${data.embeddings_generated}</li>
+                                    <li><strong>Durée:</strong> ${data.duration}s</li>
+                                    ${errorsHtml}
+                                </ul>
+                            `);
+                        } else {
+                            // Mode fallback
+                            const warningHtml = data.rag_errors && data.rag_errors.length > 0
+                                ? `<br><small style="color: #b45309;">RAG: ${data.rag_errors.join(', ')}</small>`
+                                : '';
+                            status.html(`<span style="color: #059669;">${data.message}</span>${warningHtml}`);
+                            BeauBotAdmin.showNotice('success', 'Contenu récupéré (mode fallback)');
+                            
+                            $('#beaubot-index-status').html(`
+                                <span class="beaubot-status beaubot-status-warning">Mode fallback (contenu complet)</span>
+                                <ul style="margin-top: 10px; color: #666;">
+                                    <li><strong>Pages:</strong> ${data.count || '?'}</li>
+                                    <li><strong>Taille:</strong> ${data.size || '?'} Ko</li>
+                                </ul>
+                            `);
+                        }
                     } else {
-                        status.html('<span style="color: #dc2626;">' + (response.data?.message || 'Erreur') + '</span>');
-                        BeauBotAdmin.showNotice('error', response.data?.message || 'Erreur lors du rafraîchissement');
+                        status.html('<span style="color: #dc2626;">' + (response.data?.message || response.data?.errors?.join(', ') || 'Erreur') + '</span>');
+                        BeauBotAdmin.showNotice('error', response.data?.message || 'Erreur lors de l\'indexation');
                     }
                 },
-                error() {
-                    status.html('<span style="color: #dc2626;">Erreur de connexion</span>');
-                    BeauBotAdmin.showNotice('error', 'Erreur de connexion au serveur');
+                error(xhr, status_text) {
+                    const msg = status_text === 'timeout' ? 'Timeout (l\'indexation prend trop de temps)' : 'Erreur de connexion';
+                    status.html(`<span style="color: #dc2626;">${msg}</span>`);
+                    BeauBotAdmin.showNotice('error', msg);
                 },
                 complete() {
                     button.prop('disabled', false).html(originalHtml);
@@ -330,13 +354,29 @@
             }
             html += `</div>`;
 
+            // RAG status
+            if (data.rag) {
+                const ragColor = data.rag.indexed ? '#059669' : '#b45309';
+                const ragIcon = data.rag.indexed ? '&#9989;' : '&#9888;';
+                html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
+                html += `<strong>${ragIcon} Mode :</strong> <span style="color: ${ragColor};">${data.rag.mode}</span><br>`;
+                if (data.rag.indexed) {
+                    html += `<strong>Chunks :</strong> ${data.rag.total_chunks} (${data.rag.with_embeddings} avec embeddings)<br>`;
+                    html += `<strong>Pages indexées :</strong> ${data.rag.unique_pages}<br>`;
+                    html += `<strong>Paramètres :</strong> chunk_size=${data.rag.chunk_size}, overlap=${data.rag.chunk_overlap}, top_k=${data.rag.top_k}`;
+                } else {
+                    html += `<span style="color: #b45309;">Cliquez sur "Indexer le contenu" pour activer le RAG.</span>`;
+                }
+                html += `</div>`;
+            }
+
             // Cache
             html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
-            html += `<strong>Cache :</strong> `;
+            html += `<strong>Cache fallback :</strong> `;
             if (data.cache.exists) {
                 html += `Actif (${data.cache.size_kb} Ko / ${data.cache.size} caractères)`;
             } else {
-                html += `<span style="color: #b45309;">Vide</span>`;
+                html += `<span style="color: #888;">Vide (normal en mode RAG)</span>`;
             }
             html += `</div>`;
 
@@ -347,6 +387,13 @@
                 html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
                 html += `<strong>${ctxIcon} Contexte envoyé à ChatGPT :</strong> `;
                 html += `<span style="color: ${ctxColor};">${data.context_test.length} caractères</span>`;
+                if (data.context_test.mode) {
+                    const modeColor = data.context_test.mode === 'RAG' ? '#059669' : '#b45309';
+                    html += ` <span style="background: ${modeColor}; color: white; padding: 1px 8px; border-radius: 10px; font-size: 11px;">${data.context_test.mode}</span>`;
+                }
+                if (data.context_test.query) {
+                    html += `<br><strong>Requête test :</strong> <code>${BeauBotAdmin.escapeHtml(data.context_test.query)}</code>`;
+                }
                 
                 // Infos tokens
                 if (data.context_test.tokens_est !== undefined) {
@@ -356,7 +403,6 @@
                     if (data.context_test.is_truncated) {
                         html += ` <span style="color: #dc2626;">&#9888; Contexte tronqué !</span>`;
                     }
-                    html += `<br><strong>Limite par page :</strong> ${data.context_test.max_chars_page.toLocaleString()} caractères`;
                 }
                 
                 if (data.context_test.preview_start) {

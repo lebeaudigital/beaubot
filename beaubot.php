@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.0.11
+ * Version: 1.0.12
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.0.11');
+define('BEAUBOT_VERSION', '1.0.12');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -73,6 +73,7 @@ class BeauBot {
         
         // Classes API
         require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-chatgpt.php';
+        require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-embeddings.php';
         require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-wordpress.php';
         require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-endpoints.php';
     }
@@ -129,14 +130,14 @@ class BeauBot {
     private function maybe_create_tables(): void {
         global $wpdb;
         
-        // Vérifier si la table messages existe
+        // Vérifier si les tables existent
         $table_messages = $wpdb->prefix . 'beaubot_messages';
-        $table_exists = $wpdb->get_var($wpdb->prepare(
-            "SHOW TABLES LIKE %s",
-            $table_messages
-        ));
+        $table_chunks = $wpdb->prefix . 'beaubot_content_chunks';
         
-        if (!$table_exists) {
+        $messages_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_messages));
+        $chunks_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_chunks));
+        
+        if (!$messages_exists || !$chunks_exists) {
             error_log("[BeauBot] Tables not found, creating them now...");
             $this->create_tables();
             error_log("[BeauBot] Tables created successfully.");
@@ -267,9 +268,29 @@ class BeauBot {
             KEY expires_at (expires_at)
         ) $charset_collate;";
         
+        // Table des chunks de contenu pour le RAG (Retrieval-Augmented Generation)
+        $table_chunks = $wpdb->prefix . 'beaubot_content_chunks';
+        $sql_chunks = "CREATE TABLE $table_chunks (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            page_id bigint(20) unsigned NOT NULL,
+            page_title varchar(255) NOT NULL,
+            page_url varchar(500) NOT NULL,
+            parent_title varchar(255) DEFAULT NULL,
+            chunk_index int unsigned NOT NULL DEFAULT 0,
+            content text NOT NULL,
+            content_hash varchar(32) NOT NULL,
+            embedding longtext DEFAULT NULL,
+            source_api varchar(500) DEFAULT 'local',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY page_id (page_id),
+            KEY content_hash (content_hash)
+        ) $charset_collate;";
+        
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         dbDelta($sql_messages);
         dbDelta($sql_images);
+        dbDelta($sql_chunks);
     }
 }
 
