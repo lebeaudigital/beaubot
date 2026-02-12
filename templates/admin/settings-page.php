@@ -289,14 +289,20 @@ if (!defined('ABSPATH')) {
                             </span>
                             <ul style="margin-top: 10px; color: #666;">
                                 <li><strong><?php esc_html_e('Taille:', 'beaubot'); ?></strong> <?php echo esc_html($stats['size']); ?> Ko</li>
-                                <li><strong><?php esc_html_e('Sources:', 'beaubot'); ?></strong> <?php echo esc_html(count($stats['api_urls'])); ?> API(s) configurée(s)</li>
+                                <li><strong><?php esc_html_e('Sources:', 'beaubot'); ?></strong> <?php echo esc_html($stats['sources_count']); ?> API(s) configurée(s)</li>
+                                <li><strong><?php esc_html_e('Pages locales publiées:', 'beaubot'); ?></strong> <?php echo esc_html($stats['local_pages']); ?></li>
                             </ul>
                         <?php else: ?>
                             <span class="beaubot-status beaubot-status-warning">
                                 <?php esc_html_e('Aucun cache', 'beaubot'); ?>
                             </span>
                             <p style="color: #b45309; margin-top: 10px;">
-                                <?php esc_html_e('Cliquez sur "Rafraîchir le cache" pour récupérer le contenu via les API WordPress.', 'beaubot'); ?>
+                                <?php 
+                                printf(
+                                    esc_html__('%d pages publiées détectées sur ce site. Cliquez sur "Rafraîchir le cache" pour récupérer le contenu.', 'beaubot'),
+                                    $stats['local_pages']
+                                );
+                                ?>
                             </p>
                         <?php endif; ?>
                     </div>
@@ -309,13 +315,23 @@ if (!defined('ABSPATH')) {
                         <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
                         <?php esc_html_e('Rafraîchir le cache', 'beaubot'); ?>
                     </button>
+                    <button type="button" class="button" id="beaubot-diagnostics" style="margin-left: 8px;">
+                        <span class="dashicons dashicons-search" style="margin-top: 3px;"></span>
+                        <?php esc_html_e('Diagnostic', 'beaubot'); ?>
+                    </button>
                     <span id="beaubot-reindex-status" style="margin-left: 10px;"></span>
                     <p class="description" style="margin-top: 10px;">
-                        <?php esc_html_e('Le cache se met à jour automatiquement toutes les heures. Vous pouvez forcer un rafraîchissement ici.', 'beaubot'); ?>
+                        <?php esc_html_e('Le cache se met à jour automatiquement toutes les heures. Le diagnostic permet de vérifier chaque source individuellement.', 'beaubot'); ?>
                     </p>
                 </td>
             </tr>
         </table>
+        
+        <!-- Résultats du diagnostic (caché par défaut) -->
+        <div id="beaubot-diagnostics-results" style="display: none; margin-top: 15px;">
+            <h3 style="margin-bottom: 10px;"><?php esc_html_e('Résultats du diagnostic', 'beaubot'); ?></h3>
+            <div id="beaubot-diagnostics-content" style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 4px; padding: 15px; font-family: monospace; font-size: 13px; max-height: 400px; overflow-y: auto;"></div>
+        </div>
     </div>
 
     <div class="beaubot-admin-footer">

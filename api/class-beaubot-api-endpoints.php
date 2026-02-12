@@ -190,6 +190,13 @@ class BeauBot_API_Endpoints {
             'callback' => [$this, 'test_api'],
             'permission_callback' => [$this, 'check_admin_permission'],
         ]);
+
+        // Diagnostic API WordPress (admin uniquement)
+        register_rest_route(self::NAMESPACE, '/diagnostics', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'run_diagnostics'],
+            'permission_callback' => [$this, 'check_admin_permission'],
+        ]);
     }
 
     /**
@@ -601,5 +608,20 @@ class BeauBot_API_Endpoints {
         }
 
         return new WP_REST_Response($result, 200);
+    }
+
+    /**
+     * Exécuter un diagnostic complet des sources API WordPress
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public function run_diagnostics(WP_REST_Request $request): WP_REST_Response {
+        $wp_api = new BeauBot_API_WordPress();
+        $diagnostics = $wp_api->run_diagnostics();
+
+        return new WP_REST_Response([
+            'success'     => true,
+            'diagnostics' => $diagnostics,
+        ], 200);
     }
 }

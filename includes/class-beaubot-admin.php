@@ -56,6 +56,9 @@ class BeauBot_Admin {
         
         // AJAX pour régénérer l'index
         add_action('wp_ajax_beaubot_reindex', [$this, 'ajax_reindex']);
+        
+        // AJAX pour le diagnostic
+        add_action('wp_ajax_beaubot_diagnostics', [$this, 'ajax_diagnostics']);
     }
 
     /**
@@ -115,6 +118,22 @@ class BeauBot_Admin {
         } else {
             wp_send_json_error($result);
         }
+    }
+
+    /**
+     * Exécuter le diagnostic des sources API WordPress (AJAX)
+     */
+    public function ajax_diagnostics(): void {
+        check_ajax_referer('beaubot_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Accès non autorisé.', 'beaubot')]);
+        }
+        
+        $wp_api = new BeauBot_API_WordPress();
+        $diagnostics = $wp_api->run_diagnostics();
+        
+        wp_send_json_success($diagnostics);
     }
 
     /**

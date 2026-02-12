@@ -27,6 +27,9 @@
             // Régénérer l'index
             $('#beaubot-reindex').on('click', this.reindexContent);
 
+            // Diagnostic
+            $('#beaubot-diagnostics').on('click', this.runDiagnostics);
+
             // Synchronisation color picker
             $('#beaubot_primary_color').on('input', this.syncColorFromPicker);
             $('#beaubot_primary_color_text').on('input', this.syncColorFromText);
@@ -206,6 +209,97 @@
         },
 
         /**
+         * Exécuter le diagnostic des sources API WordPress
+         */
+        runDiagnostics() {
+            const button = $(this);
+            const resultsDiv = $('#beaubot-diagnostics-results');
+            const contentDiv = $('#beaubot-diagnostics-content');
+            const originalHtml = button.html();
+
+            button.prop('disabled', true).html('<span class="dashicons dashicons-update spinning"></span> Diagnostic...');
+            resultsDiv.show();
+            contentDiv.html('<p style="color: #666;">Analyse des sources en cours...</p>');
+
+            $.ajax({
+                url: beaubotAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'beaubot_diagnostics',
+                    nonce: beaubotAdmin.nonce
+                },
+                success(response) {
+                    if (response.success) {
+                        const data = response.data;
+                        let html = '';
+
+                        // Infos générales
+                        html += `<div style="margin-bottom: 12px;">`;
+                        html += `<strong>URL du site :</strong> ${data.home_url}<br>`;
+                        html += `<strong>URL REST locale :</strong> ${data.rest_url}<br>`;
+                        html += `<strong>WordPress :</strong> ${data.wp_version}<br>`;
+                        html += `<strong>Date :</strong> ${data.timestamp}`;
+                        html += `</div>`;
+
+                        // Sources
+                        html += `<div style="border-top: 1px solid #ddd; padding-top: 12px;">`;
+                        html += `<strong>Sources configurées :</strong> ${data.configured_urls.join(', ')}<br><br>`;
+                        
+                        for (const [key, source] of Object.entries(data.sources)) {
+                            const statusIcon = source.success ? '&#9989;' : '&#10060;';
+                            const statusColor = source.success ? '#059669' : '#dc2626';
+                            
+                            html += `<div style="margin-bottom: 10px; padding: 8px; background: #fff; border-radius: 4px; border-left: 3px solid ${statusColor};">`;
+                            html += `<strong>${statusIcon} ${key}</strong><br>`;
+                            html += `<span style="color: #666;">Méthode : ${source.method}</span><br>`;
+                            
+                            if (source.success) {
+                                html += `<span style="color: ${statusColor};">${source.count} page(s) récupérée(s)</span>`;
+                                if (source.duration) {
+                                    html += ` <span style="color: #666;">en ${source.duration}</span>`;
+                                }
+                                if (source.sample && source.sample.length > 0) {
+                                    html += `<br><span style="color: #888; font-size: 12px;">Exemples : ${source.sample.join(', ')}</span>`;
+                                }
+                            } else {
+                                html += `<span style="color: ${statusColor};">Échec</span>`;
+                                if (source.error) {
+                                    html += ` : ${source.error}`;
+                                }
+                                if (source.note) {
+                                    html += `<br><span style="color: #888;">${source.note}</span>`;
+                                }
+                            }
+                            
+                            html += `</div>`;
+                        }
+                        html += `</div>`;
+
+                        // Cache
+                        html += `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-top: 12px;">`;
+                        html += `<strong>Cache :</strong> `;
+                        if (data.cache.exists) {
+                            html += `Actif (${data.cache.size_kb} Ko / ${data.cache.size} caractères)`;
+                        } else {
+                            html += `<span style="color: #b45309;">Vide</span>`;
+                        }
+                        html += `</div>`;
+
+                        contentDiv.html(html);
+                    } else {
+                        contentDiv.html('<p style="color: #dc2626;">Erreur lors du diagnostic</p>');
+                    }
+                },
+                error() {
+                    contentDiv.html('<p style="color: #dc2626;">Erreur de connexion au serveur</p>');
+                },
+                complete() {
+                    button.prop('disabled', false).html(originalHtml);
+                }
+            });
+        },
+
+        /**
          * Afficher une notice
          * @param {string} type - 'success' ou 'error'
          * @param {string} message
@@ -235,42 +329,8 @@
         }
     };
 
-    // Handler AJAX pour le test API
     $(document).ready(() => {
         BeauBotAdmin.init();
     });
 
-    // Ajouter le handler AJAX côté serveur
-    if (typeof wp !== 'undefined' && wp.ajax) {
-        // WordPress AJAX
-    }
-
 })(jQuery);
-
-// Action AJAX PHP (à ajouter dans class-beaubot-admin.php si nécessaire)
-/*
-add_action('wp_ajax_beaubot_test_api', function() {
-    check_ajax_referer('beaubot_admin_nonce', 'nonce');
-    
-    if (!current_user_can('manage_options')) {
-        wp_send_json_error(['message' => 'Accès non autorisé']);
-    }
-    
-    $api_key = sanitize_text_field($_POST['api_key'] ?? '');
-    
-    // Test temporaire avec la clé fournie
-    $temp_options = get_option('beaubot_settings', []);
-    $temp_options['api_key'] = $api_key;
-    
-    $chatgpt = new BeauBot_API_ChatGPT();
-    // Utiliser la clé temporaire pour le test
-    
-    $result = $chatgpt->test_connection();
-    
-    if (is_wp_error($result)) {
-        wp_send_json_error(['message' => $result->get_error_message()]);
-    }
-    
-    wp_send_json_success($result);
-});
-*/

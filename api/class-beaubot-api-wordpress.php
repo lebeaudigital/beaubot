@@ -2,9 +2,12 @@
 /**
  * Classe API WordPress de BeauBot
  * 
- * Récupère le contenu des pages via l'API REST WordPress.
- * Détecte automatiquement si l'URL est locale (même site) pour utiliser
- * un appel REST interne (sans HTTP) et éviter les problèmes de loopback.
+ * Récupère le contenu des pages pour le contexte ChatGPT :
+ * - Contenu LOCAL : via WP_Query directement (fiable à 100%, sans HTTP)
+ * - Contenu EXTERNE : via wp_remote_get() vers les API REST WordPress configurées
+ * 
+ * Détecte automatiquement si une URL configurée pointe vers le même site
+ * pour éviter les requêtes HTTP loopback.
  */
 
 if (!defined('ABSPATH')) {
@@ -83,8 +86,13 @@ class BeauBot_API_WordPress {
     }
 
     /**
-     * Vérifier si une URL API pointe vers le site WordPress local (même installation)
+     * Vérifier si une URL API pointe vers le même site WordPress (même installation)
      * Cela évite les requêtes HTTP loopback qui échouent souvent.
+     * 
+     * Détection par 2 méthodes :
+     * 1. Comparaison domaine + chemin (même environnement)
+     * 2. Comparaison du chemin seul (dev local vs production, ex:
+     *    https://monsite.com/memento/wp-json/wp/v2 = http://localhost:8888/memento/wp-json/wp/v2)
      * 
      * @param string $api_url
      * @return bool
@@ -92,19 +100,36 @@ class BeauBot_API_WordPress {
     private function is_local_api(string $api_url): bool {
         $local_rest_url = rest_url('wp/v2');
         
-        // Normaliser : retirer le protocole et le slash final pour comparer
+        error_log("[BeauBot WP API] Comparing URLs - Configured: {$api_url} | Local: {$local_rest_url}");
+        
+        // Méthode 1 : comparaison complète sans protocole (même domaine)
         $normalize = function(string $url): string {
             $url = preg_replace('#^https?://#i', '', $url);
             return rtrim($url, '/');
         };
         
-        $is_local = $normalize($api_url) === $normalize($local_rest_url);
-        
-        if ($is_local) {
-            error_log("[BeauBot WP API] URL détectée comme locale: {$api_url}");
+        if ($normalize($api_url) === $normalize($local_rest_url)) {
+            error_log("[BeauBot WP API] URL locale détectée (même domaine): {$api_url}");
+            return true;
         }
         
-        return $is_local;
+        // Méthode 2 : comparaison des chemins uniquement (dev local vs production)
+        // Ex: /memento/wp-json/wp/v2 est identique sur localhost:8888 et monsite.com
+        $get_path = function(string $url): string {
+            $parsed = parse_url($url);
+            return rtrim($parsed['path'] ?? '', '/');
+        };
+        
+        $api_path = $get_path($api_url);
+        $local_path = $get_path($local_rest_url);
+        
+        if (!empty($api_path) && str_contains($api_path, 'wp-json') && $api_path === $local_path) {
+            error_log("[BeauBot WP API] URL locale détectée (même chemin WP): {$api_url} → path: {$api_path}");
+            return true;
+        }
+        
+        error_log("[BeauBot WP API] URL détectée comme EXTERNE: {$api_url}");
+        return false;
     }
 
     /**
@@ -115,18 +140,24 @@ class BeauBot_API_WordPress {
     public function get_site_context(?string $query = null): string {
         error_log("[BeauBot WP API] get_site_context called");
 
-        // Vérifier le cache
+        // Vérifier le cache (avec validation : le cache doit contenir du vrai contenu)
         $cached = get_transient(self::CACHE_KEY);
-        if ($cached !== false) {
+        if ($cached !== false && strlen($cached) > 500) {
             error_log("[BeauBot WP API] Using cached context (" . strlen($cached) . " chars)");
             return $this->truncate_context($cached);
         }
+        
+        // Si le cache existe mais est trop petit, le supprimer (cache invalide/vide)
+        if ($cached !== false) {
+            error_log("[BeauBot WP API] Cache found but too small (" . strlen($cached) . " chars), clearing...");
+            delete_transient(self::CACHE_KEY);
+        }
 
-        // Récupérer les pages de toutes les sources API
+        // Récupérer les pages de toutes les sources
         $all_pages = $this->fetch_all_sources();
 
         if (empty($all_pages)) {
-            error_log("[BeauBot WP API] No pages returned from any API source");
+            error_log("[BeauBot WP API] No pages returned from any source");
             return '';
         }
 
@@ -138,35 +169,59 @@ class BeauBot_API_WordPress {
         // Formater le contenu
         $context = $this->format_pages_context($all_pages);
 
-        // Mettre en cache
-        set_transient(self::CACHE_KEY, $context, self::CACHE_DURATION);
-
-        error_log("[BeauBot WP API] Context generated: " . strlen($context) . " chars");
+        // Ne cacher que si le contenu est substantiel
+        if (strlen($context) > 500) {
+            set_transient(self::CACHE_KEY, $context, self::CACHE_DURATION);
+            error_log("[BeauBot WP API] Context cached: " . strlen($context) . " chars");
+        } else {
+            error_log("[BeauBot WP API] Context too small to cache: " . strlen($context) . " chars");
+        }
 
         return $this->truncate_context($context);
     }
 
     /**
-     * Récupérer les pages de toutes les sources API configurées
+     * Récupérer les pages de toutes les sources configurées.
+     * Étape 1 : TOUJOURS récupérer les pages locales via REST interne (fiable à 100%)
+     * Étape 2 : Ajouter les pages des sources externes configurées
+     * 
      * @return array
      */
     private function fetch_all_sources(): array {
         $all_pages = [];
 
+        // === ÉTAPE 1 : Toujours récupérer le contenu LOCAL via WP_Query ===
+        error_log("[BeauBot WP API] Step 1: Fetching LOCAL pages via WP_Query...");
+        $local_pages = $this->fetch_pages_internal();
+        
+        if (!empty($local_pages)) {
+            error_log("[BeauBot WP API] LOCAL: Got " . count($local_pages) . " pages");
+            foreach ($local_pages as &$page) {
+                $page['_source_api'] = 'local';
+            }
+            unset($page);
+            $all_pages = $local_pages;
+        } else {
+            error_log("[BeauBot WP API] LOCAL: No published pages found");
+        }
+
+        // === ÉTAPE 2 : Ajouter les sources EXTERNES (URLs qui ne pointent pas vers ce site) ===
         foreach ($this->api_base_urls as $api_url) {
-            error_log("[BeauBot WP API] Fetching from source: {$api_url}");
+            // Ignorer les URLs locales (déjà couvert par l'étape 1)
+            if ($this->is_local_api($api_url)) {
+                error_log("[BeauBot WP API] Skipping {$api_url} (local, already fetched)");
+                continue;
+            }
             
-            $pages = $this->fetch_pages_from_url($api_url);
+            error_log("[BeauBot WP API] Step 2: Fetching EXTERNAL from: {$api_url}");
+            $pages = $this->fetch_pages_external($api_url);
             
             if (is_wp_error($pages)) {
-                error_log("[BeauBot WP API] Error for {$api_url}: " . $pages->get_error_message());
-                // Continuer avec les autres sources même si une échoue
+                error_log("[BeauBot WP API] EXTERNAL error for {$api_url}: " . $pages->get_error_message());
                 continue;
             }
 
-            error_log("[BeauBot WP API] Got " . count($pages) . " pages from {$api_url}");
-            
-            // Ajouter la source à chaque page pour le contexte
+            error_log("[BeauBot WP API] EXTERNAL: Got " . count($pages) . " pages from {$api_url}");
             foreach ($pages as &$page) {
                 $page['_source_api'] = $api_url;
             }
@@ -175,96 +230,73 @@ class BeauBot_API_WordPress {
             $all_pages = array_merge($all_pages, $pages);
         }
 
+        error_log("[BeauBot WP API] Total: " . count($all_pages) . " pages from all sources");
         return $all_pages;
     }
 
     /**
-     * Récupérer les pages d'une source API (local ou distant)
-     * @param string $api_base_url
-     * @return array|WP_Error
-     */
-    private function fetch_pages_from_url(string $api_base_url): array|WP_Error {
-        // Si l'URL pointe vers le même site, utiliser l'appel REST interne
-        if ($this->is_local_api($api_base_url)) {
-            return $this->fetch_pages_internal();
-        }
-        
-        // Sinon, appel HTTP externe
-        return $this->fetch_pages_external($api_base_url);
-    }
-
-    /**
-     * Récupérer les pages via un appel REST interne (même site WordPress)
-     * Utilise rest_do_request() pour éviter les problèmes de loopback HTTP.
+     * Récupérer les pages locales via WP_Query (fiable à 100%, fonctionne dans tous les contextes)
+     * Plus fiable que rest_do_request() car ne dépend pas de l'initialisation du serveur REST.
      * 
-     * @return array|WP_Error
+     * @return array
      */
-    private function fetch_pages_internal(): array|WP_Error {
-        error_log("[BeauBot WP API] Using INTERNAL REST dispatch (no HTTP)");
+    private function fetch_pages_internal(): array {
+        error_log("[BeauBot WP API] Using WP_Query to fetch LOCAL pages");
         
         $all_pages = [];
-        $page_num = 1;
+        $paged = 1;
         $per_page = 100;
 
         do {
-            $request = new WP_REST_Request('GET', '/wp/v2/pages');
-            $request->set_query_params([
-                'per_page' => $per_page,
-                'page'     => $page_num,
-                'status'   => 'publish',
-                'orderby'  => 'menu_order',
-                'order'    => 'asc',
+            $query = new WP_Query([
+                'post_type'      => 'page',
+                'post_status'    => 'publish',
+                'posts_per_page' => $per_page,
+                'paged'          => $paged,
+                'orderby'        => 'menu_order',
+                'order'          => 'ASC',
+                'no_found_rows'  => false, // Nécessaire pour la pagination
             ]);
 
-            $response = rest_do_request($request);
-
-            if ($response->is_error()) {
-                $error = $response->as_error();
-                error_log("[BeauBot WP API] Internal REST error: " . $error->get_error_message());
-                return $error;
-            }
-
-            $pages = $response->get_data();
-            
-            if (!is_array($pages)) {
-                error_log("[BeauBot WP API] Internal REST: invalid data format");
+            if (!$query->have_posts()) {
+                if ($paged === 1) {
+                    error_log("[BeauBot WP API] WP_Query: No published pages found");
+                }
                 break;
             }
 
-            // Normaliser le format des données pour qu'il corresponde à la réponse JSON externe
-            $normalized = [];
-            foreach ($pages as $page) {
-                $normalized[] = $this->normalize_rest_page($page);
+            foreach ($query->posts as $post) {
+                $all_pages[] = $this->normalize_wp_post($post);
             }
 
-            $all_pages = array_merge($all_pages, $normalized);
+            $total_pages = $query->max_num_pages;
+            error_log("[BeauBot WP API] WP_Query page {$paged}/{$total_pages}, got " . count($query->posts) . " items");
 
-            // Récupérer le nombre total de pages depuis les headers
-            $headers = $response->get_headers();
-            $total_pages = (int) ($headers['X-WP-TotalPages'] ?? 1);
-            
-            error_log("[BeauBot WP API] Internal page {$page_num}/{$total_pages}, got " . count($pages) . " items");
+            $paged++;
+            wp_reset_postdata();
+        } while ($paged <= $total_pages);
 
-            $page_num++;
-        } while ($page_num <= $total_pages);
-
+        error_log("[BeauBot WP API] WP_Query total: " . count($all_pages) . " pages");
         return $all_pages;
     }
 
     /**
-     * Normaliser une page issue de rest_do_request() pour correspondre au format JSON externe
-     * @param array $page
+     * Normaliser un objet WP_Post pour correspondre au format JSON de l'API REST
+     * @param WP_Post $post
      * @return array
      */
-    private function normalize_rest_page(array $page): array {
+    private function normalize_wp_post(WP_Post $post): array {
+        // Appliquer the_content filters pour obtenir le HTML final (comme l'API REST le fait)
+        $content = apply_filters('the_content', $post->post_content);
+        
         return [
-            'id'         => $page['id'] ?? 0,
-            'title'      => is_array($page['title'] ?? null) ? $page['title'] : ['rendered' => $page['title'] ?? ''],
-            'content'    => is_array($page['content'] ?? null) ? $page['content'] : ['rendered' => $page['content'] ?? ''],
-            'link'       => $page['link'] ?? '',
-            'parent'     => $page['parent'] ?? 0,
-            'slug'       => $page['slug'] ?? '',
-            'menu_order' => $page['menu_order'] ?? 0,
+            'id'         => $post->ID,
+            'title'      => ['rendered' => get_the_title($post)],
+            'content'    => ['rendered' => $content],
+            'link'       => get_permalink($post),
+            'parent'     => $post->post_parent,
+            'slug'       => $post->post_name,
+            'menu_order' => $post->menu_order,
         ];
     }
 
@@ -527,20 +559,36 @@ class BeauBot_API_WordPress {
 
     /**
      * Forcer le rafraîchissement du contexte
+     * Retourne un résultat détaillé avec diagnostics pour l'interface admin.
+     * 
      * @return array
      */
     public function force_refresh(): array {
         $start = microtime(true);
+        $diagnostics = [];
         
         $this->clear_cache();
         
+        // Diagnostic : infos sur l'environnement
+        $diagnostics['local_rest_url'] = rest_url('wp/v2');
+        $diagnostics['home_url'] = home_url();
+        $diagnostics['configured_urls'] = $this->api_base_urls;
+        
+        // Récupérer les pages
         $pages = $this->fetch_all_sources();
         $duration = round(microtime(true) - $start, 2);
 
         if (empty($pages)) {
+            // Diagnostic détaillé en cas d'échec
+            $diagnostics['local_pages_count'] = wp_count_posts('page')->publish ?? 0;
+            
             return [
-                'success' => false,
-                'message' => __('Aucune page récupérée. Vérifiez les URLs des API.', 'beaubot'),
+                'success'     => false,
+                'message'     => sprintf(
+                    __('Aucune page récupérée. %d pages publiées existent sur ce site. Vérifiez les URLs des API.', 'beaubot'),
+                    $diagnostics['local_pages_count']
+                ),
+                'diagnostics' => $diagnostics,
             ];
         }
 
@@ -550,41 +598,139 @@ class BeauBot_API_WordPress {
 
         $size = round(strlen($context) / 1024, 2);
         $sources_count = count($this->api_base_urls);
+        
+        // Compter les pages par source
+        $pages_by_source = [];
+        foreach ($pages as $page) {
+            $source = $page['_source_api'] ?? 'unknown';
+            $pages_by_source[$source] = ($pages_by_source[$source] ?? 0) + 1;
+        }
 
         return [
-            'success' => true,
-            'message' => sprintf(
+            'success'         => true,
+            'message'         => sprintf(
                 __('%d pages récupérées depuis %d source(s) en %ss (%s Ko)', 'beaubot'),
                 count($pages),
                 $sources_count,
                 $duration,
                 $size
             ),
-            'count'    => count($pages),
-            'sources'  => $sources_count,
-            'size'     => $size,
-            'duration' => $duration,
+            'count'           => count($pages),
+            'sources'         => $sources_count,
+            'size'            => $size,
+            'duration'        => $duration,
+            'pages_by_source' => $pages_by_source,
+            'diagnostics'     => $diagnostics,
         ];
     }
 
     /**
-     * Obtenir les statistiques du cache
+     * Obtenir les statistiques du cache et l'état des sources
      * @return array
      */
     public function get_cache_stats(): array {
         $cached = get_transient(self::CACHE_KEY);
+        $local_published = wp_count_posts('page')->publish ?? 0;
+
+        $base = [
+            'api_urls'        => $this->api_base_urls,
+            'sources_count'   => count($this->api_base_urls),
+            'local_pages'     => (int) $local_published,
+            'home_url'        => home_url(),
+        ];
 
         if ($cached === false) {
-            return [
+            return array_merge($base, [
                 'cached'  => false,
                 'message' => __('Aucun cache disponible', 'beaubot'),
-            ];
+            ]);
         }
 
-        return [
-            'cached'   => true,
-            'size'     => round(strlen($cached) / 1024, 2),
-            'api_urls' => $this->api_base_urls,
+        return array_merge($base, [
+            'cached' => true,
+            'size'   => round(strlen($cached) / 1024, 2),
+            'chars'  => strlen($cached),
+        ]);
+    }
+
+    /**
+     * Exécuter un diagnostic complet des sources API
+     * Utile pour débugger les problèmes de récupération de contenu.
+     * 
+     * @return array
+     */
+    public function run_diagnostics(): array {
+        $results = [
+            'timestamp'     => current_time('mysql'),
+            'home_url'      => home_url(),
+            'rest_url'      => rest_url('wp/v2'),
+            'wp_version'    => get_bloginfo('version'),
+            'configured_urls' => $this->api_base_urls,
+            'sources'       => [],
         ];
+
+        // Test 1 : Contenu local via WP_Query
+        $start = microtime(true);
+        $local_pages = $this->fetch_pages_internal();
+        $duration = round(microtime(true) - $start, 3);
+
+        $results['sources']['local'] = [
+            'method'   => 'WP_Query',
+            'success'  => !empty($local_pages),
+            'count'    => count($local_pages),
+            'duration' => $duration . 's',
+            'sample'   => !empty($local_pages) 
+                ? array_map(fn($p) => $p['title']['rendered'] ?? '(sans titre)', array_slice($local_pages, 0, 5))
+                : [],
+        ];
+
+        // Test 2 : Sources externes configurées
+        foreach ($this->api_base_urls as $api_url) {
+            $is_local = $this->is_local_api($api_url);
+            
+            if ($is_local) {
+                $results['sources'][$api_url] = [
+                    'method'   => 'Skipped (détecté comme local)',
+                    'is_local' => true,
+                    'success'  => !empty($local_pages),
+                    'count'    => count($local_pages),
+                    'note'     => 'Contenu récupéré via WP_Query (étape 1)',
+                ];
+                continue;
+            }
+
+            $start = microtime(true);
+            $pages = $this->fetch_pages_external($api_url);
+            $duration = round(microtime(true) - $start, 3);
+
+            if (is_wp_error($pages)) {
+                $results['sources'][$api_url] = [
+                    'method'   => 'HTTP externe (wp_remote_get)',
+                    'is_local' => false,
+                    'success'  => false,
+                    'error'    => $pages->get_error_message(),
+                    'duration' => $duration . 's',
+                ];
+            } else {
+                $results['sources'][$api_url] = [
+                    'method'   => 'HTTP externe (wp_remote_get)',
+                    'is_local' => false,
+                    'success'  => true,
+                    'count'    => count($pages),
+                    'duration' => $duration . 's',
+                    'sample'   => array_map(fn($p) => $p['title']['rendered'] ?? '(sans titre)', array_slice($pages, 0, 5)),
+                ];
+            }
+        }
+
+        // Test 3 : État du cache
+        $cached = get_transient(self::CACHE_KEY);
+        $results['cache'] = [
+            'exists'  => $cached !== false,
+            'size'    => $cached !== false ? strlen($cached) : 0,
+            'size_kb' => $cached !== false ? round(strlen($cached) / 1024, 2) : 0,
+        ];
+
+        return $results;
     }
 }
