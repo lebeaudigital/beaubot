@@ -2,8 +2,9 @@
 /**
  * Classe API WordPress de BeauBot
  * 
- * Récupère le contenu des pages via l'API REST WordPress
- * au lieu de l'indexation locale.
+ * Récupère le contenu des pages via l'API REST WordPress.
+ * Détecte automatiquement si l'URL est locale (même site) pour utiliser
+ * un appel REST interne (sans HTTP) et éviter les problèmes de loopback.
  */
 
 if (!defined('ABSPATH')) {
@@ -63,19 +64,47 @@ class BeauBot_API_WordPress {
         $options = get_option('beaubot_settings', []);
         $urls = $options['wp_api_urls'] ?? ['https://ifip.lebeaudigital.fr/memento/wp-json/wp/v2'];
         
-        // S'assurer que c'est un tableau et supprimer les slashs finaux
+        // S'assurer que c'est un tableau et nettoyer les URLs
         if (!is_array($urls)) {
             $urls = [$urls];
         }
         
         $this->api_base_urls = array_map(function($url) {
-            return rtrim(trim($url), '/');
+            $url = rtrim(trim($url), '/');
+            // Supprimer /pages à la fin si l'utilisateur l'a ajouté par erreur
+            $url = preg_replace('#/pages$#i', '', $url);
+            return $url;
         }, array_filter($urls));
         
         // Fallback si aucune URL
         if (empty($this->api_base_urls)) {
             $this->api_base_urls = ['https://ifip.lebeaudigital.fr/memento/wp-json/wp/v2'];
         }
+    }
+
+    /**
+     * Vérifier si une URL API pointe vers le site WordPress local (même installation)
+     * Cela évite les requêtes HTTP loopback qui échouent souvent.
+     * 
+     * @param string $api_url
+     * @return bool
+     */
+    private function is_local_api(string $api_url): bool {
+        $local_rest_url = rest_url('wp/v2');
+        
+        // Normaliser : retirer le protocole et le slash final pour comparer
+        $normalize = function(string $url): string {
+            $url = preg_replace('#^https?://#i', '', $url);
+            return rtrim($url, '/');
+        };
+        
+        $is_local = $normalize($api_url) === $normalize($local_rest_url);
+        
+        if ($is_local) {
+            error_log("[BeauBot WP API] URL détectée comme locale: {$api_url}");
+        }
+        
+        return $is_local;
     }
 
     /**
@@ -150,14 +179,106 @@ class BeauBot_API_WordPress {
     }
 
     /**
-     * Récupérer toutes les pages d'une URL API WordPress REST (avec pagination)
+     * Récupérer les pages d'une source API (local ou distant)
      * @param string $api_base_url
      * @return array|WP_Error
      */
     private function fetch_pages_from_url(string $api_base_url): array|WP_Error {
+        // Si l'URL pointe vers le même site, utiliser l'appel REST interne
+        if ($this->is_local_api($api_base_url)) {
+            return $this->fetch_pages_internal();
+        }
+        
+        // Sinon, appel HTTP externe
+        return $this->fetch_pages_external($api_base_url);
+    }
+
+    /**
+     * Récupérer les pages via un appel REST interne (même site WordPress)
+     * Utilise rest_do_request() pour éviter les problèmes de loopback HTTP.
+     * 
+     * @return array|WP_Error
+     */
+    private function fetch_pages_internal(): array|WP_Error {
+        error_log("[BeauBot WP API] Using INTERNAL REST dispatch (no HTTP)");
+        
         $all_pages = [];
         $page_num = 1;
-        $per_page = 100; // Maximum autorisé par l'API WP REST
+        $per_page = 100;
+
+        do {
+            $request = new WP_REST_Request('GET', '/wp/v2/pages');
+            $request->set_query_params([
+                'per_page' => $per_page,
+                'page'     => $page_num,
+                'status'   => 'publish',
+                'orderby'  => 'menu_order',
+                'order'    => 'asc',
+            ]);
+
+            $response = rest_do_request($request);
+
+            if ($response->is_error()) {
+                $error = $response->as_error();
+                error_log("[BeauBot WP API] Internal REST error: " . $error->get_error_message());
+                return $error;
+            }
+
+            $pages = $response->get_data();
+            
+            if (!is_array($pages)) {
+                error_log("[BeauBot WP API] Internal REST: invalid data format");
+                break;
+            }
+
+            // Normaliser le format des données pour qu'il corresponde à la réponse JSON externe
+            $normalized = [];
+            foreach ($pages as $page) {
+                $normalized[] = $this->normalize_rest_page($page);
+            }
+
+            $all_pages = array_merge($all_pages, $normalized);
+
+            // Récupérer le nombre total de pages depuis les headers
+            $headers = $response->get_headers();
+            $total_pages = (int) ($headers['X-WP-TotalPages'] ?? 1);
+            
+            error_log("[BeauBot WP API] Internal page {$page_num}/{$total_pages}, got " . count($pages) . " items");
+
+            $page_num++;
+        } while ($page_num <= $total_pages);
+
+        return $all_pages;
+    }
+
+    /**
+     * Normaliser une page issue de rest_do_request() pour correspondre au format JSON externe
+     * @param array $page
+     * @return array
+     */
+    private function normalize_rest_page(array $page): array {
+        return [
+            'id'         => $page['id'] ?? 0,
+            'title'      => is_array($page['title'] ?? null) ? $page['title'] : ['rendered' => $page['title'] ?? ''],
+            'content'    => is_array($page['content'] ?? null) ? $page['content'] : ['rendered' => $page['content'] ?? ''],
+            'link'       => $page['link'] ?? '',
+            'parent'     => $page['parent'] ?? 0,
+            'slug'       => $page['slug'] ?? '',
+            'menu_order' => $page['menu_order'] ?? 0,
+        ];
+    }
+
+    /**
+     * Récupérer les pages via un appel HTTP externe (site distant)
+     * @param string $api_base_url
+     * @return array|WP_Error
+     */
+    private function fetch_pages_external(string $api_base_url): array|WP_Error {
+        error_log("[BeauBot WP API] Using EXTERNAL HTTP call to: {$api_base_url}");
+        
+        $all_pages = [];
+        $page_num = 1;
+        $per_page = 100;
 
         do {
             $url = $api_base_url . '/pages?' . http_build_query([
@@ -172,8 +293,10 @@ class BeauBot_API_WordPress {
             error_log("[BeauBot WP API] Fetching page {$page_num}: {$url}");
 
             $response = wp_remote_get($url, [
-                'timeout' => 30,
-                'headers' => [
+                'timeout'    => 30,
+                'sslverify'  => false,
+                'user-agent' => 'BeauBot/' . BEAUBOT_VERSION . ' (WordPress Plugin)',
+                'headers'    => [
                     'Accept' => 'application/json',
                 ],
             ]);
