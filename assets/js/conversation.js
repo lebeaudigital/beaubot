@@ -221,11 +221,13 @@
             return response.json();
         })
         .then(function(data) {
-            self.currentConversationId = id;
+            // Sauvegarder l'ID via setCurrentId (inclut le localStorage)
+            self.setCurrentId(id);
             self.dispatchEvent('conversationLoaded', { conversation: data.conversation });
             self.updateActiveItem(id);
             
-            if (window.innerWidth < 768 && self.isHistoryOpen) {
+            // Toujours fermer le panneau historique après sélection
+            if (self.isHistoryOpen) {
                 self.toggleHistory();
             }
         })
