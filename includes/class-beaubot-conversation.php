@@ -331,4 +331,181 @@ class BeauBot_Conversation {
             ['%d']
         ) !== false;
     }
+
+    // =========================================================================
+    // Méthodes Admin (sans vérification de propriétaire)
+    // =========================================================================
+
+    /**
+     * Obtenir une conversation par ID (admin, sans vérification de propriétaire)
+     * @param int $conversation_id
+     * @return array|null
+     */
+    public function admin_get(int $conversation_id): ?array {
+        $post = get_post($conversation_id);
+        
+        if (!$post || $post->post_type !== 'beaubot_conversation') {
+            return null;
+        }
+
+        return $this->format_conversation($post);
+    }
+
+    /**
+     * Obtenir toutes les conversations (admin, tous utilisateurs)
+     * @param int $limit
+     * @param int $offset
+     * @param string $status 'all', 'active', 'archived'
+     * @param int $author_id Filtrer par utilisateur (0 = tous)
+     * @return array
+     */
+    public function admin_get_all_conversations(
+        int $limit = 50,
+        int $offset = 0,
+        string $status = 'all',
+        int $author_id = 0
+    ): array {
+        $args = [
+            'post_type' => 'beaubot_conversation',
+            'posts_per_page' => $limit,
+            'offset' => $offset,
+            'orderby' => 'modified',
+            'order' => 'DESC',
+        ];
+
+        // Filtrer par utilisateur
+        if ($author_id > 0) {
+            $args['author'] = $author_id;
+        }
+
+        // Filtrer par statut
+        if ($status === 'active') {
+            $args['meta_query'] = [
+                [
+                    'key' => '_beaubot_archived',
+                    'value' => 0,
+                    'compare' => '=',
+                ],
+            ];
+        } elseif ($status === 'archived') {
+            $args['meta_query'] = [
+                [
+                    'key' => '_beaubot_archived',
+                    'value' => 1,
+                    'compare' => '=',
+                ],
+            ];
+        }
+
+        $query = new WP_Query($args);
+        $conversations = [];
+
+        foreach ($query->posts as $post) {
+            $conv = $this->format_conversation($post);
+            $conv['author_id'] = (int) $post->post_author;
+            $user = get_user_by('id', $post->post_author);
+            $conv['author_name'] = $user ? $user->display_name : __('Utilisateur supprimé', 'beaubot');
+            $conversations[] = $conv;
+        }
+
+        return $conversations;
+    }
+
+    /**
+     * Obtenir les messages d'une conversation (admin, sans vérification de propriétaire)
+     * @param int $conversation_id
+     * @param int $limit
+     * @param int $offset
+     * @return array
+     */
+    public function admin_get_messages(int $conversation_id, int $limit = 50, int $offset = 0): array {
+        global $wpdb;
+
+        $post = get_post($conversation_id);
+        if (!$post || $post->post_type !== 'beaubot_conversation') {
+            return [];
+        }
+
+        $results = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT * FROM {$this->table_messages} 
+                WHERE conversation_id = %d 
+                ORDER BY created_at ASC 
+                LIMIT %d OFFSET %d",
+                $conversation_id,
+                $limit,
+                $offset
+            ),
+            ARRAY_A
+        );
+
+        return $results ?: [];
+    }
+
+    /**
+     * Archiver/Désarchiver une conversation (admin, sans vérification de propriétaire)
+     * @param int $conversation_id
+     * @param bool $archive
+     * @return bool
+     */
+    public function admin_archive(int $conversation_id, bool $archive = true): bool {
+        $post = get_post($conversation_id);
+        
+        if (!$post || $post->post_type !== 'beaubot_conversation') {
+            return false;
+        }
+
+        update_post_meta($conversation_id, '_beaubot_archived', $archive ? 1 : 0);
+        return true;
+    }
+
+    /**
+     * Supprimer une conversation (admin, sans vérification de propriétaire)
+     * @param int $conversation_id
+     * @return bool
+     */
+    public function admin_delete(int $conversation_id): bool {
+        $post = get_post($conversation_id);
+        
+        if (!$post || $post->post_type !== 'beaubot_conversation') {
+            return false;
+        }
+
+        // Supprimer les messages associés
+        $this->delete_messages($conversation_id);
+
+        // Supprimer la conversation
+        return wp_delete_post($conversation_id, true) !== false;
+    }
+
+    /**
+     * Action en masse (admin) : supprimer plusieurs conversations
+     * @param array $conversation_ids
+     * @return int Nombre de conversations supprimées
+     */
+    public function admin_bulk_delete(array $conversation_ids): int {
+        $deleted = 0;
+        foreach ($conversation_ids as $id) {
+            if ($this->admin_delete((int) $id)) {
+                $deleted++;
+            }
+        }
+        return $deleted;
+    }
+
+    /**
+     * Action en masse (admin) : archiver/désarchiver plusieurs conversations
+     * @param array $conversation_ids
+     * @param bool $archive
+     * @return int Nombre de conversations modifiées
+     */
+    public function admin_bulk_archive(array $conversation_ids, bool $archive = true): int {
+        $count = 0;
+        foreach ($conversation_ids as $id) {
+            if ($this->admin_archive((int) $id, $archive)) {
+                $count++;
+            }
+        }
+        return $count;
+    }
 }

@@ -285,12 +285,217 @@
 
 .beaubot-conversation-actions {
     display: flex;
-    gap: 8px;
+    gap: 4px;
 }
 
 .beaubot-conversation-actions .button {
     padding: 4px 8px;
     font-size: 12px;
+    min-width: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.beaubot-conversation-actions .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+}
+
+/* Colonne checkbox */
+.beaubot-col-check {
+    width: 40px;
+    text-align: center !important;
+}
+
+.beaubot-col-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--beaubot-primary);
+    cursor: pointer;
+}
+
+/* Filtres */
+.beaubot-filters-bar {
+    padding: 12px 24px !important;
+}
+
+.beaubot-filters {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.beaubot-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.beaubot-filter-group label {
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--beaubot-text);
+    white-space: nowrap;
+}
+
+.beaubot-filter-group select {
+    border: 1px solid var(--beaubot-border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+
+.beaubot-filter-count {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--beaubot-text-muted);
+    font-weight: 500;
+}
+
+/* Barre d'actions en masse */
+.beaubot-bulk-toolbar {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    padding: 10px 20px;
+    margin-bottom: 16px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    transition: all 0.2s ease;
+}
+
+.beaubot-bulk-toolbar.active {
+    display: flex;
+}
+
+.beaubot-bulk-toolbar.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.beaubot-bulk-info {
+    font-size: 13px;
+    color: var(--beaubot-primary);
+}
+
+.beaubot-bulk-info strong {
+    font-size: 15px;
+}
+
+.beaubot-bulk-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.beaubot-bulk-actions .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 4px 12px;
+}
+
+.beaubot-bulk-actions .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+}
+
+/* Bouton danger */
+.beaubot-btn-danger {
+    color: #dc2626 !important;
+    border-color: #dc2626 !important;
+}
+
+.beaubot-btn-danger:hover,
+.beaubot-btn-danger:focus {
+    background: #dc2626 !important;
+    color: #fff !important;
+}
+
+.beaubot-btn-danger-icon {
+    color: #dc2626 !important;
+}
+
+.beaubot-btn-danger-icon:hover,
+.beaubot-btn-danger-icon:focus {
+    background: #fef2f2 !important;
+    border-color: #dc2626 !important;
+}
+
+/* Modal */
+.beaubot-modal {
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.beaubot-modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 24px;
+    border-radius: 12px;
+    width: 80%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.beaubot-modal-close {
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--beaubot-text-muted);
+    transition: color 0.2s;
+}
+
+.beaubot-modal-close:hover {
+    color: var(--beaubot-text);
+}
+
+.beaubot-modal-message {
+    padding: 12px 16px;
+    margin: 8px 0;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.beaubot-modal-message.user {
+    background: var(--beaubot-primary);
+    color: white;
+    margin-left: 20%;
+}
+
+.beaubot-modal-message.assistant {
+    background: #f1f5f9;
+    margin-right: 20%;
+}
+
+.beaubot-modal-message strong {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.7;
+}
+
+.beaubot-modal-message img {
+    max-width: 200px;
+    border-radius: 8px;
+    margin-top: 8px;
 }
 
 /* Empty State */

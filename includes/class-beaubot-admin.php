@@ -387,6 +387,22 @@ class BeauBot_Admin {
                 'testError' => __('Erreur de connexion à l\'API', 'beaubot'),
             ],
         ]);
+
+        // Script dédié pour la page Conversations
+        if (strpos($hook, 'beaubot-conversations') !== false) {
+            wp_enqueue_script(
+                'beaubot-admin-conversations',
+                BEAUBOT_PLUGIN_URL . 'assets/js/admin-conversations.js',
+                ['jquery'],
+                BEAUBOT_VERSION,
+                true
+            );
+
+            wp_localize_script('beaubot-admin-conversations', 'beaubotConversations', [
+                'apiBase' => esc_url_raw(rest_url('beaubot/v1/')),
+                'nonce' => wp_create_nonce('wp_rest'),
+            ]);
+        }
     }
 
     /**

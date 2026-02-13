@@ -203,6 +203,87 @@ class BeauBot_API_Endpoints {
             'callback' => [$this, 'run_diagnostics'],
             'permission_callback' => [$this, 'check_admin_permission'],
         ]);
+
+        // =====================================================================
+        // Endpoints Admin - Gestion des conversations (toutes, sans restriction)
+        // =====================================================================
+
+        // Admin: Lister toutes les conversations
+        register_rest_route(self::NAMESPACE, '/admin/conversations', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'admin_get_conversations'],
+            'permission_callback' => [$this, 'check_admin_permission'],
+            'args' => [
+                'status' => [
+                    'required' => false,
+                    'type' => 'string',
+                    'default' => 'all',
+                    'enum' => ['all', 'active', 'archived'],
+                ],
+                'author_id' => [
+                    'required' => false,
+                    'type' => 'integer',
+                    'default' => 0,
+                    'sanitize_callback' => 'absint',
+                ],
+                'limit' => [
+                    'required' => false,
+                    'type' => 'integer',
+                    'default' => 50,
+                    'sanitize_callback' => 'absint',
+                ],
+                'offset' => [
+                    'required' => false,
+                    'type' => 'integer',
+                    'default' => 0,
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        // Admin: Voir une conversation (avec messages)
+        register_rest_route(self::NAMESPACE, '/admin/conversations/(?P<id>\d+)', [
+            [
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => [$this, 'admin_get_conversation'],
+                'permission_callback' => [$this, 'check_admin_permission'],
+            ],
+            [
+                'methods' => WP_REST_Server::EDITABLE,
+                'callback' => [$this, 'admin_update_conversation'],
+                'permission_callback' => [$this, 'check_admin_permission'],
+                'args' => [
+                    'archived' => [
+                        'required' => false,
+                        'type' => 'boolean',
+                    ],
+                ],
+            ],
+            [
+                'methods' => WP_REST_Server::DELETABLE,
+                'callback' => [$this, 'admin_delete_conversation'],
+                'permission_callback' => [$this, 'check_admin_permission'],
+            ],
+        ]);
+
+        // Admin: Actions en masse
+        register_rest_route(self::NAMESPACE, '/admin/conversations/bulk', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [$this, 'admin_bulk_action'],
+            'permission_callback' => [$this, 'check_admin_permission'],
+            'args' => [
+                'action' => [
+                    'required' => true,
+                    'type' => 'string',
+                    'enum' => ['delete', 'archive', 'unarchive'],
+                ],
+                'ids' => [
+                    'required' => true,
+                    'type' => 'array',
+                    'items' => ['type' => 'integer'],
+                ],
+            ],
+        ]);
     }
 
     /**
@@ -629,6 +710,180 @@ class BeauBot_API_Endpoints {
         return new WP_REST_Response([
             'success'     => true,
             'diagnostics' => $diagnostics,
+        ], 200);
+    }
+
+    // =========================================================================
+    // Endpoints Admin - Conversations
+    // =========================================================================
+
+    /**
+     * Admin: Lister toutes les conversations (tous utilisateurs)
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     */
+    public function admin_get_conversations(WP_REST_Request $request): WP_REST_Response {
+        $status = $request->get_param('status') ?: 'all';
+        $author_id = (int) $request->get_param('author_id');
+        $limit = (int) $request->get_param('limit');
+        $offset = (int) $request->get_param('offset');
+
+        $conversation_handler = new BeauBot_Conversation();
+        $conversations = $conversation_handler->admin_get_all_conversations($limit, $offset, $status, $author_id);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'conversations' => $conversations,
+        ], 200);
+    }
+
+    /**
+     * Admin: Obtenir une conversation avec ses messages
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function admin_get_conversation(WP_REST_Request $request): WP_REST_Response|WP_Error {
+        $conversation_id = (int) $request->get_param('id');
+
+        $conversation_handler = new BeauBot_Conversation();
+        $conversation = $conversation_handler->admin_get($conversation_id);
+
+        if (!$conversation) {
+            return new WP_Error(
+                'not_found',
+                __('Conversation non trouvée.', 'beaubot'),
+                ['status' => 404]
+            );
+        }
+
+        // Inclure les messages
+        $messages = $conversation_handler->admin_get_messages($conversation_id);
+        $conversation['messages'] = $messages;
+
+        // Inclure les infos auteur
+        $post = get_post($conversation_id);
+        $user = get_user_by('id', $post->post_author);
+        $conversation['author_name'] = $user ? $user->display_name : __('Utilisateur supprimé', 'beaubot');
+
+        return new WP_REST_Response([
+            'success' => true,
+            'conversation' => $conversation,
+        ], 200);
+    }
+
+    /**
+     * Admin: Mettre à jour une conversation (archiver/désarchiver)
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function admin_update_conversation(WP_REST_Request $request): WP_REST_Response|WP_Error {
+        $conversation_id = (int) $request->get_param('id');
+
+        $conversation_handler = new BeauBot_Conversation();
+
+        // Archiver/Désarchiver
+        $archived = $request->get_param('archived');
+        if ($archived !== null) {
+            $result = $conversation_handler->admin_archive($conversation_id, (bool) $archived);
+            if (!$result) {
+                return new WP_Error(
+                    'update_failed',
+                    __('Impossible de mettre à jour la conversation.', 'beaubot'),
+                    ['status' => 400]
+                );
+            }
+        }
+
+        $conversation = $conversation_handler->admin_get($conversation_id);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'conversation' => $conversation,
+        ], 200);
+    }
+
+    /**
+     * Admin: Supprimer une conversation
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function admin_delete_conversation(WP_REST_Request $request): WP_REST_Response|WP_Error {
+        $conversation_id = (int) $request->get_param('id');
+
+        $conversation_handler = new BeauBot_Conversation();
+        $result = $conversation_handler->admin_delete($conversation_id);
+
+        if (!$result) {
+            return new WP_Error(
+                'delete_failed',
+                __('Impossible de supprimer la conversation.', 'beaubot'),
+                ['status' => 400]
+            );
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => __('Conversation supprimée.', 'beaubot'),
+        ], 200);
+    }
+
+    /**
+     * Admin: Action en masse (supprimer, archiver, désarchiver)
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function admin_bulk_action(WP_REST_Request $request): WP_REST_Response|WP_Error {
+        $action = $request->get_param('action');
+        $ids = $request->get_param('ids');
+
+        if (empty($ids) || !is_array($ids)) {
+            return new WP_Error(
+                'invalid_ids',
+                __('Aucune conversation sélectionnée.', 'beaubot'),
+                ['status' => 400]
+            );
+        }
+
+        $conversation_handler = new BeauBot_Conversation();
+        $count = 0;
+
+        switch ($action) {
+            case 'delete':
+                $count = $conversation_handler->admin_bulk_delete($ids);
+                $message = sprintf(
+                    _n('%d conversation supprimée.', '%d conversations supprimées.', $count, 'beaubot'),
+                    $count
+                );
+                break;
+
+            case 'archive':
+                $count = $conversation_handler->admin_bulk_archive($ids, true);
+                $message = sprintf(
+                    _n('%d conversation archivée.', '%d conversations archivées.', $count, 'beaubot'),
+                    $count
+                );
+                break;
+
+            case 'unarchive':
+                $count = $conversation_handler->admin_bulk_archive($ids, false);
+                $message = sprintf(
+                    _n('%d conversation désarchivée.', '%d conversations désarchivées.', $count, 'beaubot'),
+                    $count
+                );
+                break;
+
+            default:
+                return new WP_Error(
+                    'invalid_action',
+                    __('Action non reconnue.', 'beaubot'),
+                    ['status' => 400]
+                );
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'count' => $count,
+            'message' => $message,
         ], 200);
     }
 }

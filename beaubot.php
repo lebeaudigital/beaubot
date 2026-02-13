@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.3.1
+ * Version: 1.3.2
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.3.1');
+define('BEAUBOT_VERSION', '1.3.2');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
