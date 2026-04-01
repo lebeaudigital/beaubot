@@ -194,7 +194,7 @@ class BeauBot_API_ChatGPT {
                             'type' => 'image_url',
                             'image_url' => [
                                 'url' => $image_base64,
-                                'detail' => 'high',
+                                'detail' => 'low',
                             ],
                         ],
                     ],
