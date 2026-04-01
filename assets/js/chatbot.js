@@ -111,18 +111,21 @@
         });
     };
 
-    BeauBot.prototype.sendMessage = function() {
-        var message = this.inputField ? this.inputField.value.trim() : '';
-        var imageData = this.fileUpload ? this.fileUpload.getImageData() : null;
+    BeauBot.prototype.sendMessage = function(overrideMessage) {
+        var message = overrideMessage || (this.inputField ? this.inputField.value.trim() : '');
+        var imageData = (!overrideMessage && this.fileUpload) ? this.fileUpload.getImageData() : null;
 
         if (!message && !imageData) return;
         if (this.isLoading) return;
 
+        this.hideSuggestions();
         this.addMessage('user', message, imageData);
 
-        this.inputField.value = '';
-        this.autoResizeInput();
-        if (this.fileUpload) this.fileUpload.removeImage();
+        if (!overrideMessage) {
+            this.inputField.value = '';
+            this.autoResizeInput();
+            if (this.fileUpload) this.fileUpload.removeImage();
+        }
 
         this.sendToAPI(message, imageData);
     };
@@ -283,101 +286,126 @@
     };
 
     BeauBot.prototype.showWelcomeMessage = function() {
-        var botName = this.config.botName || 'BeauBot';
-        var welcomeMessage = 'Bonjour ' + this.config.userName + ' ! 👋\n\n' +
-            'Je suis ' + botName + ', votre assistant IA. Je peux répondre à vos questions sur le contenu de ce site.';
-
-        this.addMessage('assistant', welcomeMessage);
-
-        // Afficher les profils si configurés
-        var profiles = this.config.userProfiles || [];
-        if (profiles.length > 0 && !this.userProfile) {
-            this.showProfileSelection();
-        }
-    };
-
-    /**
-     * Afficher la sélection de profil
-     */
-    BeauBot.prototype.showProfileSelection = function() {
         if (!this.messagesContainer) return;
 
-        var self = this;
+        var botName = this.config.botName || 'BeauBot';
+        var userName = this.config.userName || '';
         var profiles = this.config.userProfiles || [];
-        if (profiles.length === 0) return;
+        var hasProfiles = profiles.length > 0 && !this.userProfile;
 
-        var profileQuestion = this.config.profileQuestion || 'Quel est votre profil ?';
+        var welcomeEl = document.createElement('div');
+        welcomeEl.className = 'beaubot-welcome';
 
-        var containerEl = document.createElement('div');
-        containerEl.className = 'beaubot-message beaubot-assistant beaubot-profile-selection';
+        var html = '<div class="beaubot-welcome-header">';
+        html += '<div class="beaubot-welcome-logo">';
+        html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>';
+        html += '</div>';
+        html += '<h2 class="beaubot-welcome-title">Bonjour ' + this.escapeHtml(userName) + ' !</h2>';
+        html += '<p class="beaubot-welcome-subtitle">' + this.escapeHtml(botName) + ', votre assistant IA personnel.</p>';
+        html += '</div>';
 
-        var avatar = '<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>';
-
-        var buttonsHtml = '';
-        for (var i = 0; i < profiles.length; i++) {
-            buttonsHtml += '<button type="button" class="beaubot-profile-btn" data-profile-index="' + i + '" data-profile-level="' + this.escapeHtml(profiles[i].level) + '">' + 
-                this.escapeHtml(profiles[i].label) + 
-            '</button>';
+        if (hasProfiles) {
+            var profileQuestion = this.config.profileQuestion || 'Quel est votre profil ?';
+            html += '<p class="beaubot-welcome-question">' + this.escapeHtml(profileQuestion) + '</p>';
+            html += '<div class="beaubot-profile-cards">';
+            for (var i = 0; i < profiles.length; i++) {
+                var p = profiles[i];
+                var iconName = p.icon || 'message';
+                html += '<button type="button" class="beaubot-profile-card" data-profile-index="' + i + '">';
+                html += '<div class="beaubot-profile-card-icon"><i class="ti ti-' + this.escapeHtml(iconName) + '"></i></div>';
+                html += '<div class="beaubot-profile-card-title">' + this.escapeHtml(p.label) + '</div>';
+                if (p.description) {
+                    html += '<div class="beaubot-profile-card-desc">' + this.escapeHtml(p.description) + '</div>';
+                }
+                html += '</button>';
+            }
+            html += '</div>';
         }
 
-        containerEl.innerHTML = 
-            '<div class="beaubot-avatar">' + avatar + '</div>' +
-            '<div class="beaubot-message-content">' +
-                '<div class="beaubot-message-text">' +
-                    '<p class="beaubot-profile-question">' + this.escapeHtml(profileQuestion) + '</p>' +
-                    '<div class="beaubot-profile-buttons">' + buttonsHtml + '</div>' +
-                '</div>' +
-            '</div>';
-
-        this.messagesContainer.appendChild(containerEl);
+        welcomeEl.innerHTML = html;
+        this.messagesContainer.appendChild(welcomeEl);
         this.scrollToBottom();
 
-        // Lier les événements des boutons
-        var buttons = containerEl.querySelectorAll('.beaubot-profile-btn');
-        for (var j = 0; j < buttons.length; j++) {
-            buttons[j].addEventListener('click', function() {
-                var index = parseInt(this.getAttribute('data-profile-index'));
-                self.selectProfile(index);
-            });
+        if (hasProfiles) {
+            var self = this;
+            var cards = welcomeEl.querySelectorAll('.beaubot-profile-card');
+            for (var j = 0; j < cards.length; j++) {
+                cards[j].addEventListener('click', function() {
+                    var index = parseInt(this.getAttribute('data-profile-index'));
+                    self.selectProfile(index);
+                });
+            }
         }
+
+        this.showSuggestions();
     };
 
-    /**
-     * Sélectionner un profil
-     */
     BeauBot.prototype.selectProfile = function(index) {
         var profiles = this.config.userProfiles || [];
         if (index < 0 || index >= profiles.length) return;
 
         this.userProfile = profiles[index];
-
-        // Stocker dans le localStorage pour cette session
         localStorage.setItem('beaubot_user_profile', JSON.stringify(this.userProfile));
 
-        // Désactiver les boutons et marquer le choix
-        var selectionEl = this.messagesContainer.querySelector('.beaubot-profile-selection');
-        if (selectionEl) {
-            var buttons = selectionEl.querySelectorAll('.beaubot-profile-btn');
-            for (var i = 0; i < buttons.length; i++) {
-                buttons[i].disabled = true;
-                if (parseInt(buttons[i].getAttribute('data-profile-index')) === index) {
-                    buttons[i].classList.add('beaubot-profile-selected');
-                } else {
-                    buttons[i].classList.add('beaubot-profile-dimmed');
-                }
+        var cards = this.messagesContainer.querySelectorAll('.beaubot-profile-card');
+        for (var i = 0; i < cards.length; i++) {
+            if (parseInt(cards[i].getAttribute('data-profile-index')) === index) {
+                cards[i].classList.add('beaubot-profile-card-selected');
+            } else {
+                cards[i].classList.add('beaubot-profile-card-dimmed');
             }
+            cards[i].disabled = true;
         }
 
-        // Message de confirmation
-        var confirmMsg = 'Parfait ! Je vais adapter mes réponses à votre profil. Comment puis-je vous aider ?';
-        this.addMessage('assistant', confirmMsg);
+        this.addMessage('assistant', 'Parfait ! Je vais adapter mes réponses à votre profil **' + this.escapeHtml(this.userProfile.label) + '**. Comment puis-je vous aider ?');
+    };
+
+    BeauBot.prototype.showSuggestions = function() {
+        var container = document.getElementById('beaubot-suggestions');
+        if (!container) return;
+
+        var suggestions = this.config.suggestions || [];
+        if (suggestions.length === 0) return;
+
+        var self = this;
+        var html = '';
+        for (var i = 0; i < suggestions.length; i++) {
+            var s = suggestions[i];
+            var iconName = s.icon || '';
+            var text = this.escapeHtml(s.text);
+            var parts = text.split(' ');
+            var formatted = '<strong>' + parts[0] + '</strong>' + (parts.length > 1 ? ' ' + parts.slice(1).join(' ') : '');
+
+            html += '<button type="button" class="beaubot-suggestion-chip" data-suggestion="' + this.escapeHtml(s.text) + '">';
+            if (iconName) html += '<span class="beaubot-suggestion-icon"><i class="ti ti-' + this.escapeHtml(iconName) + '"></i></span>';
+            html += '<span>' + formatted + '</span>';
+            html += '</button>';
+        }
+
+        container.innerHTML = html;
+        container.style.display = '';
+
+        var chips = container.querySelectorAll('.beaubot-suggestion-chip');
+        for (var j = 0; j < chips.length; j++) {
+            chips[j].addEventListener('click', function() {
+                var text = this.getAttribute('data-suggestion');
+                self.sendMessage(text);
+            });
+        }
+    };
+
+    BeauBot.prototype.hideSuggestions = function() {
+        var container = document.getElementById('beaubot-suggestions');
+        if (container) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
     };
 
     BeauBot.prototype.handleNewConversation = function() {
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
         }
-        // Réinitialiser le profil pour la nouvelle conversation
         this.userProfile = null;
         localStorage.removeItem('beaubot_user_profile');
         
@@ -390,6 +418,8 @@
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
         }
+
+        this.hideSuggestions();
 
         if (conversation.messages) {
             for (var i = 0; i < conversation.messages.length; i++) {

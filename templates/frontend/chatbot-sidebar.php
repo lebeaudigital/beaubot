@@ -179,6 +179,9 @@ $primary_light = sprintf("#%02x%02x%02x",
             </div>
         </div>
         
+        <!-- Suggestions -->
+        <div id="beaubot-suggestions"></div>
+
         <!-- Hidden File Input -->
         <input type="file" 
                id="beaubot-file-input" 

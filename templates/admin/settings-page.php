@@ -129,31 +129,6 @@ if (!defined('ABSPATH')) {
                         </p>
                     </td>
                 </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Position de la sidebar', 'beaubot'); ?></th>
-                    <td>
-                        <?php $position = $options['sidebar_position'] ?? 'right'; ?>
-                        <div class="beaubot-radio-group">
-                            <label>
-                                <input type="radio" 
-                                       name="beaubot_settings[sidebar_position]" 
-                                       value="left" 
-                                       <?php checked($position, 'left'); ?>>
-                                <?php esc_html_e('Gauche', 'beaubot'); ?>
-                            </label>
-                            <label>
-                                <input type="radio" 
-                                       name="beaubot_settings[sidebar_position]" 
-                                       value="right" 
-                                       <?php checked($position, 'right'); ?>>
-                                <?php esc_html_e('Droite', 'beaubot'); ?>
-                            </label>
-                        </div>
-                        <p class="description">
-                            <?php esc_html_e('Position par défaut. Les utilisateurs peuvent la modifier.', 'beaubot'); ?>
-                        </p>
-                    </td>
-                </tr>
             </table>
         </div>
 
@@ -259,35 +234,67 @@ if (!defined('ABSPATH')) {
                             __('Technicien', 'beaubot'),
                             __('Chercheur', 'beaubot'),
                         ];
+                        $desc_placeholders = [
+                            __('Réponses simples et pédagogiques.', 'beaubot'),
+                            __('Réponses techniques et détaillées.', 'beaubot'),
+                            __('Conseils pratiques et terrain.', 'beaubot'),
+                            __('Informations techniques ciblées.', 'beaubot'),
+                            __('Données approfondies et références.', 'beaubot'),
+                        ];
+                        $icon_defaults = ['school', 'settings-2', 'plant-2', 'tool', 'flask'];
                         for ($i = 0; $i < 5; $i++): 
                             $label = $user_profiles[$i]['label'] ?? '';
                             $level = $user_profiles[$i]['level'] ?? 'beginner';
+                            $icon = $user_profiles[$i]['icon'] ?? '';
+                            $description = $user_profiles[$i]['description'] ?? '';
                         ?>
-                            <div class="beaubot-profile-row" style="display: flex; align-items: center; margin-bottom: 8px; gap: 10px;">
-                                <span style="color: #666; min-width: 20px;"><?php echo ($i + 1); ?>.</span>
-                                <input type="text" 
-                                       name="beaubot_settings[user_profiles][<?php echo $i; ?>][label]" 
-                                       value="<?php echo esc_attr($label); ?>" 
-                                       class="regular-text"
-                                       placeholder="<?php echo esc_attr($placeholders[$i]); ?>"
-                                       style="max-width: 200px;">
-                                <select name="beaubot_settings[user_profiles][<?php echo $i; ?>][level]" style="min-width: 140px;">
-                                    <option value="beginner" <?php selected($level, 'beginner'); ?>>
-                                        <?php esc_html_e('Essentiel', 'beaubot'); ?>
-                                    </option>
-                                    <option value="expert" <?php selected($level, 'expert'); ?>>
-                                        <?php esc_html_e('Approfondi', 'beaubot'); ?>
-                                    </option>
-                                </select>
-                                <?php if (!empty($label)): ?>
-                                    <span class="beaubot-profile-badge" style="padding: 2px 8px; border-radius: 10px; font-size: 11px; <?php echo $level === 'expert' ? 'background: #dbeafe; color: #1e40af;' : 'background: #dcfce7; color: #166534;'; ?>">
-                                        <?php echo $level === 'expert' ? esc_html__('Approfondi', 'beaubot') : esc_html__('Essentiel', 'beaubot'); ?>
+                            <div class="beaubot-profile-row" style="display: flex; align-items: flex-start; margin-bottom: 12px; gap: 10px; padding: 12px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                <span style="color: #666; min-width: 20px; padding-top: 8px;"><?php echo ($i + 1); ?>.</span>
+                                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 60px;">
+                                    <span class="beaubot-icon-preview" data-target="beaubot_profile_icon_<?php echo $i; ?>" style="width: 40px; height: 40px; border-radius: 10px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #6366f1;">
+                                        <i class="ti ti-<?php echo esc_attr($icon ?: $icon_defaults[$i]); ?>"></i>
                                     </span>
-                                <?php endif; ?>
+                                    <input type="text"
+                                           id="beaubot_profile_icon_<?php echo $i; ?>"
+                                           name="beaubot_settings[user_profiles][<?php echo $i; ?>][icon]"
+                                           value="<?php echo esc_attr($icon); ?>"
+                                           placeholder="<?php echo esc_attr($icon_defaults[$i]); ?>"
+                                           class="beaubot-icon-input"
+                                           style="width: 60px; text-align: center; font-size: 11px; padding: 4px;">
+                                </div>
+                                <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="text" 
+                                               name="beaubot_settings[user_profiles][<?php echo $i; ?>][label]" 
+                                               value="<?php echo esc_attr($label); ?>" 
+                                               class="regular-text"
+                                               placeholder="<?php echo esc_attr($placeholders[$i]); ?>"
+                                               style="max-width: 180px;">
+                                        <select name="beaubot_settings[user_profiles][<?php echo $i; ?>][level]" style="min-width: 130px;">
+                                            <option value="beginner" <?php selected($level, 'beginner'); ?>>
+                                                <?php esc_html_e('Essentiel', 'beaubot'); ?>
+                                            </option>
+                                            <option value="expert" <?php selected($level, 'expert'); ?>>
+                                                <?php esc_html_e('Approfondi', 'beaubot'); ?>
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <input type="text"
+                                           name="beaubot_settings[user_profiles][<?php echo $i; ?>][description]"
+                                           value="<?php echo esc_attr($description); ?>"
+                                           placeholder="<?php echo esc_attr($desc_placeholders[$i]); ?>"
+                                           class="regular-text"
+                                           style="max-width: 350px; font-size: 12px; color: #6b7280;">
+                                </div>
                             </div>
                         <?php endfor; ?>
                         <p class="description" style="margin-top: 10px;">
-                            <?php esc_html_e('Laissez le champ vide pour ne pas afficher le profil. Les profils « Essentiel » donnent des réponses concises, les profils « Approfondi » donnent des réponses détaillées et structurées.', 'beaubot'); ?>
+                            <?php 
+                            printf(
+                                esc_html__('Nom d\'icône Tabler Icons (ex: school, settings-2, flask). Parcourez les icônes sur %s. Laissez le titre vide pour masquer un profil.', 'beaubot'),
+                                '<a href="https://tabler.io/icons" target="_blank" rel="noopener">tabler.io/icons</a>'
+                            );
+                            ?>
                         </p>
                     </td>
                 </tr>
@@ -424,3 +431,17 @@ if (!defined('ABSPATH')) {
         </p>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.beaubot-icon-input').forEach(function(input) {
+        input.addEventListener('input', function() {
+            var preview = document.querySelector('.beaubot-icon-preview[data-target="' + this.id + '"]');
+            if (preview) {
+                var iconName = this.value.trim() || this.placeholder;
+                preview.innerHTML = '<i class="ti ti-' + iconName.replace(/[^a-z0-9-]/g, '') + '"></i>';
+            }
+        });
+    });
+});
+</script>

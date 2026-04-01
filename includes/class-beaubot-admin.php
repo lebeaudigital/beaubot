@@ -167,6 +167,15 @@ class BeauBot_Admin {
             'beaubot-conversations',
             [$this, 'render_conversations_page']
         );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Suggestions', 'beaubot'),
+            __('Suggestions', 'beaubot'),
+            'manage_options',
+            'beaubot-suggestions',
+            [$this, 'render_suggestions_page']
+        );
     }
 
     /**
@@ -180,6 +189,16 @@ class BeauBot_Admin {
                 'type' => 'array',
                 'sanitize_callback' => [$this, 'sanitize_settings'],
                 'default' => $this->get_default_settings(),
+            ]
+        );
+
+        register_setting(
+            'beaubot_suggestions_group',
+            'beaubot_suggestions',
+            [
+                'type' => 'array',
+                'sanitize_callback' => [$this, 'sanitize_suggestions'],
+                'default' => [],
             ]
         );
 
@@ -320,11 +339,15 @@ class BeauBot_Admin {
                 $level = in_array($raw_profiles[$i]['level'] ?? '', ['beginner', 'expert']) 
                     ? $raw_profiles[$i]['level'] 
                     : 'beginner';
+                $icon = preg_replace('/[^a-z0-9-]/', '', sanitize_text_field($raw_profiles[$i]['icon'] ?? ''));
+                $description = sanitize_text_field($raw_profiles[$i]['description'] ?? '');
                 
                 if (!empty($label)) {
                     $sanitized['user_profiles'][] = [
                         'label' => $label,
                         'level' => $level,
+                        'icon' => $icon,
+                        'description' => $description,
                     ];
                 }
             }
@@ -364,9 +387,16 @@ class BeauBot_Admin {
         }
 
         wp_enqueue_style(
+            'tabler-icons',
+            'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css',
+            [],
+            '3.31.0'
+        );
+
+        wp_enqueue_style(
             'beaubot-admin',
             BEAUBOT_PLUGIN_URL . 'assets/css/admin.css',
-            [],
+            ['tabler-icons'],
             BEAUBOT_VERSION
         );
 
@@ -564,5 +594,42 @@ class BeauBot_Admin {
             <?php esc_html_e('Instructions données à l\'IA pour définir son comportement.', 'beaubot'); ?>
         </p>
         <?php
+    }
+
+    /**
+     * Sanitiser les suggestions
+     * @param mixed $input
+     * @return array
+     */
+    public function sanitize_suggestions($input): array {
+        $sanitized = [];
+        if (!is_array($input)) {
+            return $sanitized;
+        }
+
+        for ($i = 0; $i < 4; $i++) {
+            $text = sanitize_text_field($input[$i]['text'] ?? '');
+            $icon = preg_replace('/[^a-z0-9-]/', '', sanitize_text_field($input[$i]['icon'] ?? ''));
+            if (!empty($text)) {
+                $sanitized[] = [
+                    'text' => $text,
+                    'icon' => $icon,
+                ];
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Rendre la page des suggestions
+     */
+    public function render_suggestions_page(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        settings_errors('beaubot_suggestions_messages');
+        include BEAUBOT_PLUGIN_DIR . 'templates/admin/suggestions-page.php';
     }
 }

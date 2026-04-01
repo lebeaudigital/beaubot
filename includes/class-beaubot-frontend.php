@@ -48,11 +48,19 @@ class BeauBot_Frontend {
      * Charger les assets frontend
      */
     public function enqueue_assets(): void {
+        // Tabler Icons
+        wp_enqueue_style(
+            'tabler-icons',
+            'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css',
+            [],
+            '3.31.0'
+        );
+
         // CSS
         wp_enqueue_style(
             'beaubot-frontend',
             BEAUBOT_PLUGIN_URL . 'assets/css/frontend.css',
-            [],
+            ['tabler-icons'],
             BEAUBOT_VERSION
         );
 
@@ -109,6 +117,20 @@ class BeauBot_Frontend {
                 $profiles_for_js[] = [
                     'label' => $profile['label'],
                     'level' => $profile['level'] ?? 'beginner',
+                    'icon' => $profile['icon'] ?? '',
+                    'description' => $profile['description'] ?? '',
+                ];
+            }
+        }
+
+        // Préparer les suggestions
+        $suggestions = get_option('beaubot_suggestions', []);
+        $suggestions_for_js = [];
+        foreach ($suggestions as $suggestion) {
+            if (!empty($suggestion['text'])) {
+                $suggestions_for_js[] = [
+                    'text' => $suggestion['text'],
+                    'icon' => $suggestion['icon'] ?? '',
                 ];
             }
         }
@@ -124,6 +146,7 @@ class BeauBot_Frontend {
             'maxFileSize' => wp_max_upload_size(),
             'allowedMimeTypes' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
             'userProfiles' => $profiles_for_js,
+            'suggestions' => $suggestions_for_js,
             'profileQuestion' => $this->options['profile_question'] ?? __('Quel est votre profil ?', 'beaubot'),
             'strings' => [
                 'placeholder' => __('Posez votre question...', 'beaubot'),
