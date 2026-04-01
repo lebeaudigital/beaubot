@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.4.1
+ * Version: 1.5.0
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.4.1');
+define('BEAUBOT_VERSION', '1.5.0');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -89,6 +89,9 @@ class BeauBot {
         // Initialisation
         add_action('init', [$this, 'init']);
         add_action('plugins_loaded', [$this, 'load_textdomain']);
+
+        // Mise à jour du schéma si la version a changé
+        $this->maybe_upgrade();
         
         // Admin
         if (is_admin()) {
@@ -174,6 +177,17 @@ class BeauBot {
     }
 
     /**
+     * Mettre à jour le schéma si la version du plugin a changé
+     */
+    private function maybe_upgrade(): void {
+        $db_version = get_option('beaubot_db_version', '0');
+        if (version_compare($db_version, BEAUBOT_VERSION, '<')) {
+            $this->create_tables();
+            update_option('beaubot_db_version', BEAUBOT_VERSION);
+        }
+    }
+
+    /**
      * Activation du plugin
      */
     public function activate(): void {
@@ -247,6 +261,8 @@ class BeauBot {
             role varchar(20) NOT NULL DEFAULT 'user',
             content longtext NOT NULL,
             image_url varchar(500) DEFAULT NULL,
+            tokens_input int unsigned DEFAULT NULL,
+            tokens_output int unsigned DEFAULT NULL,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY conversation_id (conversation_id),

@@ -193,6 +193,14 @@
                                 if (msg.image_url) {
                                     html += '<br><img src="' + this.escapeAttr(msg.image_url) + '" alt="Image">';
                                 }
+                                if (msg.role === 'assistant' && (msg.tokens_input || msg.tokens_output)) {
+                                    html += '<div class="beaubot-tokens-info">';
+                                    html += '<span class="dashicons dashicons-chart-bar"></span> ';
+                                    if (msg.tokens_input) html += 'In: <strong>' + Number(msg.tokens_input).toLocaleString() + '</strong>';
+                                    if (msg.tokens_input && msg.tokens_output) html += ' &middot; ';
+                                    if (msg.tokens_output) html += 'Out: <strong>' + Number(msg.tokens_output).toLocaleString() + '</strong>';
+                                    html += '</div>';
+                                }
                                 html += '</div>';
                             });
                         } else {

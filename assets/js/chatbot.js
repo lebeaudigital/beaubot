@@ -168,7 +168,7 @@
             if (data.conversation_id && self.conversation) {
                 self.conversation.setCurrentId(data.conversation_id);
             }
-            self.addMessage('assistant', data.message.content);
+            self.addMessage('assistant', data.message.content, null, data.usage);
         })
         .catch(function(error) {
             console.error('BeauBot: API Error', error);
@@ -179,7 +179,7 @@
         });
     };
 
-    BeauBot.prototype.addMessage = function(role, content, imageData) {
+    BeauBot.prototype.addMessage = function(role, content, imageData, usage) {
         if (!this.messagesContainer) return;
 
         var messageEl = document.createElement('div');
@@ -197,6 +197,17 @@
         
         if (content) {
             contentHtml += '<div class="beaubot-message-text">' + this.formatMessage(content) + '</div>';
+        }
+
+        if (role === 'assistant' && usage) {
+            var tokensIn = usage.prompt_tokens;
+            var tokensOut = usage.completion_tokens;
+            if (tokensIn || tokensOut) {
+                contentHtml += '<div class="beaubot-usage-info">';
+                if (tokensIn) contentHtml += '<span>In: ' + Number(tokensIn).toLocaleString() + '</span>';
+                if (tokensOut) contentHtml += '<span>Out: ' + Number(tokensOut).toLocaleString() + '</span>';
+                contentHtml += '</div>';
+            }
         }
 
         messageEl.innerHTML = 
@@ -424,7 +435,14 @@
         if (conversation.messages) {
             for (var i = 0; i < conversation.messages.length; i++) {
                 var msg = conversation.messages[i];
-                this.addMessage(msg.role, msg.content, msg.image_url);
+                var msgUsage = null;
+                if (msg.tokens_input || msg.tokens_output) {
+                    msgUsage = {
+                        prompt_tokens: msg.tokens_input,
+                        completion_tokens: msg.tokens_output,
+                    };
+                }
+                this.addMessage(msg.role, msg.content, msg.image_url, msgUsage);
             }
         }
     };

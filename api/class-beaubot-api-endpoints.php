@@ -416,12 +416,20 @@ class BeauBot_API_Endpoints {
             return $response;
         }
 
-        // Enregistrer la réponse de l'assistant
+        // Extraire les tokens de la réponse
+        $usage = $response['usage'] ?? null;
+        $tokens_input = $usage['prompt_tokens'] ?? null;
+        $tokens_output = $usage['completion_tokens'] ?? null;
+
+        // Enregistrer la réponse de l'assistant avec les tokens
         $conversation_handler->add_message(
             $conversation_id, 
             $user_id, 
             'assistant', 
-            $response['content']
+            $response['content'],
+            null,
+            $tokens_input ? (int) $tokens_input : null,
+            $tokens_output ? (int) $tokens_output : null
         );
 
         return new WP_REST_Response([
@@ -431,7 +439,7 @@ class BeauBot_API_Endpoints {
                 'role' => 'assistant',
                 'content' => $response['content'],
             ],
-            'usage' => $response['usage'],
+            'usage' => $usage,
         ], 200);
     }
 

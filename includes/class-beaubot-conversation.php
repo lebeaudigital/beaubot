@@ -198,6 +198,8 @@ class BeauBot_Conversation {
      * @param string $role
      * @param string $content
      * @param string|null $image_url
+     * @param int|null $tokens_input
+     * @param int|null $tokens_output
      * @return int|false
      */
     public function add_message(
@@ -205,22 +207,25 @@ class BeauBot_Conversation {
         int $user_id, 
         string $role, 
         string $content, 
-        ?string $image_url = null
+        ?string $image_url = null,
+        ?int $tokens_input = null,
+        ?int $tokens_output = null
     ): int|false {
         global $wpdb;
 
-        $result = $wpdb->insert(
-            $this->table_messages,
-            [
-                'conversation_id' => $conversation_id,
-                'user_id' => $user_id,
-                'role' => $role,
-                'content' => $content,
-                'image_url' => $image_url,
-                'created_at' => current_time('mysql'),
-            ],
-            ['%d', '%d', '%s', '%s', '%s', '%s']
-        );
+        $data = [
+            'conversation_id' => $conversation_id,
+            'user_id' => $user_id,
+            'role' => $role,
+            'content' => $content,
+            'image_url' => $image_url,
+            'tokens_input' => $tokens_input,
+            'tokens_output' => $tokens_output,
+            'created_at' => current_time('mysql'),
+        ];
+        $formats = ['%d', '%d', '%s', '%s', '%s', '%d', '%d', '%s'];
+
+        $result = $wpdb->insert($this->table_messages, $data, $formats);
 
         if ($result === false) {
             return false;

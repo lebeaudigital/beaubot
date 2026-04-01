@@ -169,6 +169,15 @@
         width: auto;
         left: var(--beaubot-sidebar-margin);
     }
+
+    .beaubot-profile-cards {
+        flex-wrap: wrap;
+    }
+
+    .beaubot-profile-card {
+        flex: 1 1 calc(50% - 5px);
+        min-width: 120px;
+    }
 }
 
 /* ========================================
@@ -476,6 +485,22 @@
     display: block;
 }
 
+/* Token usage info */
+.beaubot-usage-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--beaubot-text-muted);
+    border-top: 1px solid var(--beaubot-border);
+}
+
+.beaubot-usage-info span {
+    opacity: 0.7;
+}
+
 /* Error message */
 .beaubot-message.beaubot-error {
     justify-content: center;
@@ -506,30 +531,31 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 40px 20px 20px;
+    padding: 40px 24px 20px;
     flex: 1;
     animation: beaubot-fade-in 0.4s ease;
 }
 
 .beaubot-welcome-header {
-    margin-bottom: 28px;
+    margin-bottom: 32px;
 }
 
 .beaubot-welcome-logo {
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--beaubot-primary) 0%, var(--beaubot-primary-dark) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 16px;
+    margin: 0 auto 18px;
     color: white;
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.25);
 }
 
 .beaubot-welcome-logo svg {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
 }
 
 .beaubot-welcome-title {
@@ -544,15 +570,17 @@
     font-size: 14px;
     color: var(--beaubot-text-muted);
     line-height: 1.5;
+    margin-bottom: 0;
 }
 
 .beaubot-welcome-question {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--beaubot-text-secondary);
+    margin-top: 32px;
     margin-bottom: 16px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
 }
 
 /* ========================================
@@ -561,17 +589,16 @@
 
 .beaubot-profile-cards {
     display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
     justify-content: center;
     width: 100%;
-    max-width: 520px;
+    max-width: 600px;
 }
 
 .beaubot-profile-card {
-    flex: 1 1 calc(50% - 6px);
-    min-width: 130px;
-    max-width: 180px;
+    flex: 1 1 0;
+    min-width: 0;
     padding: 16px 14px;
     background: var(--beaubot-bg);
     border: 1px solid var(--beaubot-border);
