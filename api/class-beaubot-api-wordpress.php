@@ -40,25 +40,24 @@ class BeauBot_API_WordPress {
 
     /**
      * Nombre maximum de tokens pour le contexte RAG
-     * En mode RAG, on envoie uniquement les chunks pertinents.
-     * 15K tokens laisse de la place pour ~8 chunks de 1500 chars + métadonnées.
+     * Cible : 1200-1500 tokens input pour le contexte RAG uniquement.
      */
-    private const RAG_MAX_CONTEXT_TOKENS = 15000;
+    private const RAG_MAX_CONTEXT_TOKENS = 1500;
 
     /**
-     * Taille d'un chunk en caractères
+     * Taille d'un chunk en caractères (~250 tokens)
      */
-    private const CHUNK_SIZE = 1500;
+    private const CHUNK_SIZE = 1000;
 
     /**
      * Chevauchement entre les chunks en caractères
      */
-    private const CHUNK_OVERLAP = 200;
+    private const CHUNK_OVERLAP = 150;
 
     /**
      * Nombre de chunks les plus pertinents à retourner par méthode de recherche
      */
-    private const TOP_K_RESULTS = 8;
+    private const TOP_K_RESULTS = 3;
 
     /**
      * Map des IDs parents pour la hiérarchie
@@ -1197,9 +1196,8 @@ class BeauBot_API_WordPress {
 
         arsort($merged);
 
-        // Retourner plus de résultats que top_k pour permettre une meilleure couverture
-        // On prend top_k + quelques résultats keyword bonus
-        $max_results = min($top_k + 3, count($merged));
+        // Limiter les résultats pour respecter le budget de tokens
+        $max_results = min($top_k + 1, count($merged));
         return array_slice($merged, 0, $max_results, true);
     }
 
@@ -1236,12 +1234,7 @@ class BeauBot_API_WordPress {
             $chunks_by_id[$chunk['id']] = $chunk;
         }
 
-        $context = "=== INFORMATIONS DU SITE ===\n";
-        $context .= "Nom: {$site_name}\n";
-        $context .= "URL: {$site_url}\n\n";
-        $context .= "=== CONTENU PERTINENT (recherche hybride : sémantique + mots-clés) ===\n";
-        $context .= "Question: {$query}\n";
-        $context .= "Résultats: " . count($top_results) . " extraits les plus pertinents\n\n";
+        $context = "Site: {$site_name} ({$site_url})\n\n";
 
         $rank = 1;
         foreach ($top_results as $chunk_id => $score) {
@@ -1250,15 +1243,9 @@ class BeauBot_API_WordPress {
             }
 
             $chunk = $chunks_by_id[$chunk_id];
-            $relevance = round($score * 100, 1);
-
-            $context .= "--- Extrait {$rank} (pertinence: {$relevance}%) ---\n";
-            $context .= $chunk['content'] . "\n\n";
-
+            $context .= "[{$rank}] " . trim($chunk['content']) . "\n\n";
             $rank++;
         }
-
-        $context .= "=== FIN DU CONTENU PERTINENT ===\n";
 
         // Tronquer si nécessaire pour respecter la limite RAG
         $tokens = $this->estimate_tokens($context);

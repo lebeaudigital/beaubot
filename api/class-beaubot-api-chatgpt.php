@@ -143,13 +143,9 @@ class BeauBot_API_ChatGPT {
         }
 
         if ($site_context) {
-            $prompt .= "\n" . str_repeat('=', 50) . "\n";
-            $prompt .= "BASE DE DONNÉES DU SITE - CHERCHE ICI:\n";
-            $prompt .= str_repeat('=', 50) . "\n\n";
+            $prompt .= "\n---CONTENU DU SITE---\n";
             $prompt .= $site_context;
-            $prompt .= "\n\n" . str_repeat('=', 50) . "\n";
-            $prompt .= "FIN DE LA BASE DE DONNÉES\n";
-            $prompt .= str_repeat('=', 50) . "\n";
+            $prompt .= "---FIN---\n";
         } else {
             $prompt .= "\n[ATTENTION: Aucun contenu du site n'a été fourni. Indique à l'utilisateur de régénérer l'index.]\n";
         }
