@@ -206,13 +206,80 @@
 
     BeauBot.prototype.formatMessage = function(text) {
         text = this.escapeHtml(text);
-        text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+
+        // Code blocks (protect content inside from further processing)
+        var codeBlocks = [];
+        text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, function(match, lang, code) {
+            codeBlocks.push('<pre><code class="language-' + lang + '">' + code + '</code></pre>');
+            return '%%CODEBLOCK_' + (codeBlocks.length - 1) + '%%';
+        });
+
         text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        // Headings
+        text = text.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+        text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+
+        // Bold and italic
         text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
         text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+        // Links
         text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+        // Horizontal rules
+        text = text.replace(/^---$/gm, '<hr>');
+
+        // Lists
+        text = this.formatLists(text);
+
+        // Paragraphs: wrap remaining text blocks in <p> tags
+        text = text.replace(/\n\n+/g, '</p><p>');
         text = text.replace(/\n/g, '<br>');
+
+        // Clean up <br> and <p> around block elements
+        text = text.replace(/<\/(h[2-4]|ul|ol|pre|hr)>(<br>|<\/p><p>)/g, '</$1>');
+        text = text.replace(/(<br>|<\/p><p>)<(h[2-4]|ul|ol|pre|hr)/g, '<$2');
+
+        // Restore code blocks
+        for (var i = 0; i < codeBlocks.length; i++) {
+            text = text.replace('%%CODEBLOCK_' + i + '%%', codeBlocks[i]);
+        }
+
         return text;
+    };
+
+    BeauBot.prototype.formatLists = function(text) {
+        var lines = text.split('\n');
+        var result = [];
+        var inUl = false;
+        var inOl = false;
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var ulMatch = line.match(/^[-*]\s+(.+)$/);
+            var olMatch = line.match(/^\d+\.\s+(.+)$/);
+
+            if (ulMatch) {
+                if (inOl) { result.push('</ol>'); inOl = false; }
+                if (!inUl) { result.push('<ul>'); inUl = true; }
+                result.push('<li>' + ulMatch[1] + '</li>');
+            } else if (olMatch) {
+                if (inUl) { result.push('</ul>'); inUl = false; }
+                if (!inOl) { result.push('<ol>'); inOl = true; }
+                result.push('<li>' + olMatch[1] + '</li>');
+            } else {
+                if (inUl) { result.push('</ul>'); inUl = false; }
+                if (inOl) { result.push('</ol>'); inOl = false; }
+                result.push(line);
+            }
+        }
+
+        if (inUl) result.push('</ul>');
+        if (inOl) result.push('</ol>');
+
+        return result.join('\n');
     };
 
     BeauBot.prototype.showWelcomeMessage = function() {

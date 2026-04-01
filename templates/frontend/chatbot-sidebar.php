@@ -10,16 +10,8 @@ if (!defined('ABSPATH')) {
 }
 
 $options = get_option('beaubot_settings', []);
-$position = $options['sidebar_position'] ?? 'right';
 $bot_name = $options['bot_name'] ?? 'BeauBot';
 $primary_color = $options['primary_color'] ?? '#6366f1';
-
-// Vérifier les préférences utilisateur
-$user_id = get_current_user_id();
-$user_prefs = get_user_meta($user_id, 'beaubot_preferences', true);
-if (!empty($user_prefs['sidebar_position'])) {
-    $position = $user_prefs['sidebar_position'];
-}
 
 // Calculer les variantes de couleur
 $primary_rgb = sscanf($primary_color, "#%02x%02x%02x");
@@ -46,7 +38,7 @@ $primary_light = sprintf("#%02x%02x%02x",
 </style>
 
 <!-- Toggle Button -->
-<button id="beaubot-toggle" class="beaubot-<?php echo esc_attr($position); ?>" aria-label="<?php esc_attr_e('Ouvrir le chatbot', 'beaubot'); ?>">
+<button id="beaubot-toggle" aria-label="<?php esc_attr_e('Ouvrir le chatbot', 'beaubot'); ?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
     </svg>
@@ -56,7 +48,7 @@ $primary_light = sprintf("#%02x%02x%02x",
 <div id="beaubot-overlay"></div>
 
 <!-- Sidebar -->
-<div id="beaubot-sidebar" class="beaubot-<?php echo esc_attr($position); ?>">
+<div id="beaubot-sidebar">
     
     <!-- Header -->
     <header class="beaubot-header">
@@ -88,16 +80,6 @@ $primary_light = sprintf("#%02x%02x%02x",
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
                     <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-            </button>
-            <button type="button" 
-                    class="beaubot-header-btn beaubot-position-toggle" 
-                    title="<?php esc_attr_e('Changer de côté', 'beaubot'); ?>">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <polyline points="9 21 3 21 3 15"></polyline>
-                    <line x1="21" y1="3" x2="14" y2="10"></line>
-                    <line x1="3" y1="21" x2="10" y2="14"></line>
                 </svg>
             </button>
             <button type="button" 
@@ -189,9 +171,9 @@ $primary_light = sprintf("#%02x%02x%02x",
                         id="beaubot-send" 
                         class="beaubot-input-btn"
                         title="<?php esc_attr_e('Envoyer', 'beaubot'); ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="19" x2="12" y2="5"></line>
+                        <polyline points="5 12 12 5 19 12"></polyline>
                     </svg>
                 </button>
             </div>

@@ -9,7 +9,6 @@
     window.BeauBotSidebar = function(config) {
         this.config = config;
         this.isOpen = false;
-        this.position = config.sidebarPosition || 'right';
         this.container = null;
         this.overlay = null;
         this.toggleButton = null;
@@ -57,7 +56,6 @@
         }
         this.overlay = document.getElementById('beaubot-overlay');
         this.toggleButton = document.getElementById('beaubot-toggle');
-        this.setPosition(this.position);
     };
 
     BeauBotSidebar.prototype.bindEvents = function() {
@@ -89,13 +87,6 @@
             }
         });
 
-        var positionToggle = this.container ? this.container.querySelector('.beaubot-position-toggle') : null;
-        if (positionToggle) {
-            positionToggle.addEventListener('click', function() {
-                self.togglePosition();
-            });
-        }
-
         this.handleResize();
         window.addEventListener('resize', function() {
             self.handleResize();
@@ -103,40 +94,7 @@
     };
 
     BeauBotSidebar.prototype.loadUserPreference = function() {
-        var self = this;
-        
-        fetch(this.config.restUrl + 'preferences', {
-            headers: {
-                'X-WP-Nonce': this.config.nonce,
-            },
-        })
-        .then(function(response) {
-            if (response.ok) return response.json();
-            throw new Error('Failed');
-        })
-        .then(function(data) {
-            if (data.preferences && data.preferences.sidebar_position) {
-                self.setPosition(data.preferences.sidebar_position);
-            }
-        })
-        .catch(function(error) {
-            console.log('BeauBot: Could not load preferences', error);
-        });
-    };
-
-    BeauBotSidebar.prototype.saveUserPreference = function() {
-        fetch(this.config.restUrl + 'preferences', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-WP-Nonce': this.config.nonce,
-            },
-            body: JSON.stringify({
-                sidebar_position: this.position,
-            }),
-        }).catch(function(error) {
-            console.log('BeauBot: Could not save preferences', error);
-        });
+        // Preferences loading (reserved for future use)
     };
 
     BeauBotSidebar.prototype.open = function() {
@@ -178,33 +136,6 @@
         }
     };
 
-    BeauBotSidebar.prototype.setPosition = function(position) {
-        if (!this.container) return;
-        
-        this.position = position;
-        this.container.classList.remove('beaubot-left', 'beaubot-right');
-        this.container.classList.add('beaubot-' + position);
-        
-        if (this.toggleButton) {
-            this.toggleButton.classList.remove('beaubot-left', 'beaubot-right');
-            this.toggleButton.classList.add('beaubot-' + position);
-        }
-
-        var positionText = this.container.querySelector('.beaubot-position-text');
-        if (positionText) {
-            positionText.textContent = position === 'left' 
-                ? this.config.strings.positionRight 
-                : this.config.strings.positionLeft;
-        }
-
-        this.dispatchEvent('positionChange', { position: position });
-    };
-
-    BeauBotSidebar.prototype.togglePosition = function() {
-        var newPosition = this.position === 'left' ? 'right' : 'left';
-        this.setPosition(newPosition);
-        this.saveUserPreference();
-    };
 
     BeauBotSidebar.prototype.handleResize = function() {
         var isMobile = window.innerWidth < 768;
@@ -222,10 +153,6 @@
 
     BeauBotSidebar.prototype.getIsOpen = function() {
         return this.isOpen;
-    };
-
-    BeauBotSidebar.prototype.getPosition = function() {
-        return this.position;
     };
 
 })();
