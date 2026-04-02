@@ -308,18 +308,27 @@ class BeauBot_Conversation {
      * @param int $user_id
      * @return array
      */
-    public function get_messages_for_context(int $conversation_id, int $user_id): array {
-        $messages = $this->get_messages($conversation_id, $user_id, 100, 0);
-        $formatted = [];
+    public function get_messages_for_context(int $conversation_id, int $user_id, int $max_messages = 40): array {
+        global $wpdb;
 
-        foreach ($messages as $message) {
-            $formatted[] = [
-                'role' => $message['role'],
-                'content' => $message['content'],
-            ];
+        $conversation = $this->get($conversation_id, $user_id);
+        if (!$conversation) {
+            return [];
         }
 
-        return $formatted;
+        $results = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT role, content FROM {$this->table_messages} 
+                WHERE conversation_id = %d 
+                ORDER BY created_at DESC 
+                LIMIT %d",
+                $conversation_id,
+                $max_messages
+            ),
+            ARRAY_A
+        );
+
+        return $results ? array_reverse($results) : [];
     }
 
     /**
