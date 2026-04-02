@@ -107,25 +107,56 @@ class BeauBot_API_ChatGPT {
      */
     private function build_system_prompt(?string $site_context, ?string $user_profile_level = null): string {
         $site_name = get_bloginfo('name');
+        
         $base_prompt = $this->options['system_prompt'] ?? '';
-
-        $prompt = "Assistant du site \"{$site_name}\". Réponds en français. Base-toi UNIQUEMENT sur le contenu ci-dessous. Si absent du contenu, dis-le.\n";
-
+        
+        $prompt = "Tu es l'assistant pédagogique du site \"{$site_name}\". ";
+        $prompt .= "Tu expliques comme un professeur bienveillant qui aide ses étudiants à comprendre.\n\n";
+        
+        // Adapter les règles selon le niveau de profil
         if ($user_profile_level === 'expert') {
-            $prompt .= "Mode expert: réponse détaillée, structurée, vocabulaire technique, cite les sources.\n";
+            $prompt .= "NIVEAU DE RÉPONSE : APPROFONDI (profil expert)\n";
+            $prompt .= "RÈGLES ABSOLUES:\n";
+            $prompt .= "- Fournis une réponse DÉTAILLÉE et STRUCTURÉE avec des sous-titres si pertinent.\n";
+            $prompt .= "- Utilise un vocabulaire technique et précis adapté à un professionnel.\n";
+            $prompt .= "- Organise ta réponse avec des listes à puces, des étapes numérotées ou des tableaux si nécessaire.\n";
+            $prompt .= "- Ajoute des explications complémentaires, des nuances et des cas particuliers.\n";
+            $prompt .= "- Cite les sources et pages de référence dans ta réponse.\n";
+            $prompt .= "- Réponds en français.\n";
+            $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
+            $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";
         } else {
-            $prompt .= "Mode essentiel: 3-5 phrases max, langage simple, source à la fin.\n";
+            $prompt .= "NIVEAU DE RÉPONSE : ESSENTIEL (profil débutant)\n";
+            $prompt .= "RÈGLES ABSOLUES:\n";
+            $prompt .= "- SOIS CONCIS : 3 à 5 phrases maximum pour une réponse standard. Va droit à l'essentiel.\n";
+            $prompt .= "- Explique simplement, avec un langage clair et accessible.\n";
+            $prompt .= "- Un seul paragraphe d'explication + la source à la fin.\n";
+            $prompt .= "- Si l'utilisateur veut plus de détails, il demandera — ne donne pas tout d'un coup.\n";
+            $prompt .= "- Termine par la page source pour approfondir.\n";
+            $prompt .= "- Réponds en français.\n";
+            $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
+            $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";
         }
-
+        
         if (!empty($base_prompt)) {
-            $prompt .= $base_prompt . "\n";
+            $prompt .= "\nInstructions supplémentaires du propriétaire du site:\n{$base_prompt}\n";
         }
 
         if ($site_context) {
-            $prompt .= "---\n" . $site_context . "---\n";
+            $prompt .= "\n---CONTENU DU SITE---\n";
+            $prompt .= $site_context;
+            $prompt .= "---FIN---\n";
+        } else {
+            $prompt .= "\n[ATTENTION: Aucun contenu du site n'a été fourni. Indique à l'utilisateur de régénérer l'index.]\n";
         }
 
-        error_log("[BeauBot] System prompt: " . strlen($prompt) . " chars, context: " . strlen($site_context ?? '') . " chars");
+        // Log pour debug
+        error_log("[BeauBot] System prompt length: " . strlen($prompt) . " chars");
+        if ($site_context) {
+            error_log("[BeauBot] Site context length: " . strlen($site_context) . " chars");
+        } else {
+            error_log("[BeauBot] WARNING: No site context provided!");
+        }
 
         return $prompt;
     }
