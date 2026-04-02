@@ -176,6 +176,15 @@ class BeauBot_Admin {
             'beaubot-suggestions',
             [$this, 'render_suggestions_page']
         );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Statistiques', 'beaubot'),
+            __('Statistiques', 'beaubot'),
+            'manage_options',
+            'beaubot-statistics',
+            [$this, 'render_statistics_page']
+        );
     }
 
     /**
@@ -433,6 +442,25 @@ class BeauBot_Admin {
                 'nonce' => wp_create_nonce('wp_rest'),
             ]);
         }
+
+        // Chart.js + script dédié pour la page Statistiques
+        if (strpos($hook, 'beaubot-statistics') !== false) {
+            wp_enqueue_script(
+                'chartjs',
+                'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
+                [],
+                '4.4.7',
+                true
+            );
+
+            wp_enqueue_script(
+                'beaubot-admin-statistics',
+                BEAUBOT_PLUGIN_URL . 'assets/js/admin-statistics.js',
+                ['chartjs'],
+                BEAUBOT_VERSION,
+                true
+            );
+        }
     }
 
     /**
@@ -631,5 +659,13 @@ class BeauBot_Admin {
 
         settings_errors('beaubot_suggestions_messages');
         include BEAUBOT_PLUGIN_DIR . 'templates/admin/suggestions-page.php';
+    }
+
+    public function render_statistics_page(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        include BEAUBOT_PLUGIN_DIR . 'templates/admin/statistics-page.php';
     }
 }

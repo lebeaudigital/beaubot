@@ -421,7 +421,7 @@ class BeauBot_API_Endpoints {
         $tokens_input = $usage['prompt_tokens'] ?? null;
         $tokens_output = $usage['completion_tokens'] ?? null;
 
-        // Enregistrer la réponse de l'assistant avec les tokens
+        // Enregistrer la réponse de l'assistant avec les tokens et le modèle
         $conversation_handler->add_message(
             $conversation_id, 
             $user_id, 
@@ -429,7 +429,8 @@ class BeauBot_API_Endpoints {
             $response['content'],
             null,
             $tokens_input ? (int) $tokens_input : null,
-            $tokens_output ? (int) $tokens_output : null
+            $tokens_output ? (int) $tokens_output : null,
+            $response['model'] ?? null
         );
 
         return new WP_REST_Response([

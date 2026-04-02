@@ -200,6 +200,7 @@ class BeauBot_Conversation {
      * @param string|null $image_url
      * @param int|null $tokens_input
      * @param int|null $tokens_output
+     * @param string|null $model
      * @return int|false
      */
     public function add_message(
@@ -209,7 +210,8 @@ class BeauBot_Conversation {
         string $content, 
         ?string $image_url = null,
         ?int $tokens_input = null,
-        ?int $tokens_output = null
+        ?int $tokens_output = null,
+        ?string $model = null
     ): int|false {
         global $wpdb;
 
@@ -221,9 +223,10 @@ class BeauBot_Conversation {
             'image_url' => $image_url,
             'tokens_input' => $tokens_input,
             'tokens_output' => $tokens_output,
+            'model' => $model,
             'created_at' => current_time('mysql'),
         ];
-        $formats = ['%d', '%d', '%s', '%s', '%s', '%d', '%d', '%s'];
+        $formats = ['%d', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s'];
 
         $result = $wpdb->insert($this->table_messages, $data, $formats);
 
