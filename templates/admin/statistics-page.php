@@ -12,9 +12,23 @@ $table = $wpdb->prefix . 'beaubot_messages';
 
 // Grille tarifaire ($ par 1M tokens)
 $pricing = [
-    'gpt-4o' => ['input' => 2.50, 'output' => 10.00],
     'gpt-4o-mini' => ['input' => 0.15, 'output' => 0.60],
+    'gpt-4o' => ['input' => 2.50, 'output' => 10.00],
 ];
+
+// Normaliser le nom du modèle retourné par l'API (ex: "gpt-4o-mini-2024-07-18" → "gpt-4o-mini")
+function beaubot_resolve_model(string $raw_model, array $pricing): string {
+    if (isset($pricing[$raw_model])) {
+        return $raw_model;
+    }
+    // Tester du plus spécifique au plus général (gpt-4o-mini avant gpt-4o)
+    foreach (array_keys($pricing) as $key) {
+        if (str_starts_with($raw_model, $key)) {
+            return $key;
+        }
+    }
+    return $raw_model;
+}
 
 // Données agrégées par jour et par modèle (1 an glissant)
 $daily_stats = $wpdb->get_results(
@@ -55,8 +69,8 @@ $total_cost_month = 0.0;
 $total_tokens_month = 0;
 
 foreach ($month_stats as $row) {
-    $model_key = $row['model'];
-    $rates = $pricing[$model_key] ?? $pricing['gpt-4o'];
+    $model_key = beaubot_resolve_model($row['model'], $pricing);
+    $rates = $pricing[$model_key] ?? $pricing['gpt-4o-mini'];
     $cost = ($row['total_input'] / 1_000_000) * $rates['input']
           + ($row['total_output'] / 1_000_000) * $rates['output'];
 
@@ -72,8 +86,8 @@ $avg_cost_per_request = $total_requests_month > 0
 // Préparer les données pour Chart.js
 $chart_data = [];
 foreach ($daily_stats as $row) {
-    $model_key = $row['model'];
-    $rates = $pricing[$model_key] ?? $pricing['gpt-4o'];
+    $model_key = beaubot_resolve_model($row['model'], $pricing);
+    $rates = $pricing[$model_key] ?? $pricing['gpt-4o-mini'];
     $cost = ($row['total_input'] / 1_000_000) * $rates['input']
           + ($row['total_output'] / 1_000_000) * $rates['output'];
 

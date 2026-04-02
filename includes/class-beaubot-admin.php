@@ -297,7 +297,7 @@ class BeauBot_Admin {
     private function get_default_settings(): array {
         return [
             'api_key' => '',
-            'model' => 'gpt-4o',
+            'model' => 'gpt-4o-mini',
             'bot_name' => 'BeauBot',
             'primary_color' => '#6366f1',
             'sidebar_position' => 'right',
@@ -318,7 +318,7 @@ class BeauBot_Admin {
         
         // API
         $sanitized['api_key'] = sanitize_text_field($input['api_key'] ?? '');
-        $sanitized['model'] = sanitize_text_field($input['model'] ?? 'gpt-4o');
+        $sanitized['model'] = sanitize_text_field($input['model'] ?? 'gpt-4o-mini');
         
         // Interface
         $sanitized['bot_name'] = sanitize_text_field($input['bot_name'] ?? 'BeauBot');

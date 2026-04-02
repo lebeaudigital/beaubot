@@ -40,7 +40,7 @@ class BeauBot_API_ChatGPT {
     public function __construct() {
         $this->options = get_option('beaubot_settings', []);
         $this->api_key = $this->options['api_key'] ?? '';
-        $this->model = $this->options['model'] ?? 'gpt-4o';
+        $this->model = $this->options['model'] ?? 'gpt-4o-mini';
     }
 
     /**
