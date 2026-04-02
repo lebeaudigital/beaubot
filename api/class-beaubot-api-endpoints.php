@@ -287,6 +287,22 @@ class BeauBot_API_Endpoints {
     }
 
     /**
+     * Construire une requête RAG enrichie avec le contexte conversationnel.
+     * Utilisé uniquement pour la recherche de chunks — n'ajoute rien au prompt envoyé à OpenAI.
+     */
+    private function build_rag_query(string $current_message, array $messages): string {
+        $recent = array_slice($messages, -4);
+        $parts = [];
+        foreach ($recent as $msg) {
+            if ($msg['role'] === 'user') {
+                $parts[] = $msg['content'];
+            }
+        }
+        $query = implode(' ', $parts);
+        return mb_substr($query, 0, 500);
+    }
+
+    /**
      * Vérifier les permissions utilisateur
      * @return bool|WP_Error
      */
@@ -395,11 +411,14 @@ class BeauBot_API_Endpoints {
         // Obtenir l'historique des messages pour le contexte
         $messages = $conversation_handler->get_messages_for_context($conversation_id, $user_id);
 
+        // Construire la requête RAG enrichie avec les derniers échanges
+        $rag_query = $this->build_rag_query($message, $messages);
+
         // Obtenir le contexte du site via l'API WordPress REST
-        $site_context = $wp_api->get_site_context($message);
+        $site_context = $wp_api->get_site_context($rag_query);
         
         // Log pour debug
-        error_log("[BeauBot] Getting site context via WP API for message: " . substr($message, 0, 100));
+        error_log("[BeauBot] Getting site context via WP API for query: " . substr($rag_query, 0, 200));
         error_log("[BeauBot] Context retrieved: " . (empty($site_context) ? "EMPTY!" : strlen($site_context) . " chars"));
         
         if (empty($site_context)) {
