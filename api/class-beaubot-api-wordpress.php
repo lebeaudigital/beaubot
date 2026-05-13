@@ -66,6 +66,18 @@ class BeauBot_API_WordPress {
     private array $parent_map = [];
 
     /**
+     * Chunks utilisés lors de la dernière recherche RAG (pour exposer les sources).
+     * @var array
+     */
+    private array $last_used_chunks = [];
+
+    /**
+     * Résultats triés de la dernière recherche RAG [chunk_id => score].
+     * @var array
+     */
+    private array $last_top_results = [];
+
+    /**
      * Instance unique
      * @var BeauBot_API_WordPress|null
      */
@@ -1052,6 +1064,10 @@ class BeauBot_API_WordPress {
     public function search_relevant_chunks(string $query, int $top_k = self::TOP_K_RESULTS): string {
         $start = microtime(true);
 
+        // Réinitialiser les sources entre deux requêtes
+        $this->last_used_chunks = [];
+        $this->last_top_results = [];
+
         // Charger tous les chunks depuis la BDD
         $chunk_data = $this->load_chunks_with_embeddings();
 
@@ -1097,7 +1113,37 @@ class BeauBot_API_WordPress {
             return $this->get_fallback_context();
         }
 
+        // Mémoriser les chunks et résultats pour exposer les sources
+        $this->last_used_chunks = $chunk_data;
+        $this->last_top_results = $merged;
+
         return $this->format_rag_context($chunk_data, $merged, $query);
+    }
+
+    /**
+     * Récupérer les sources structurées issues de la dernière recherche RAG.
+     * Doit être appelé après get_site_context() / search_relevant_chunks().
+     *
+     * @param string $query Question utilisateur (pour extraire le snippet pertinent).
+     * @param int    $limit Nombre maximum de sources à retourner.
+     * @return array Liste des sources prêtes pour le frontend.
+     */
+    public function get_last_sources(string $query, int $limit = 3): array {
+        if (empty($this->last_used_chunks) || empty($this->last_top_results)) {
+            return [];
+        }
+
+        if (!class_exists('BeauBot_API_Sources')) {
+            require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-sources.php';
+        }
+
+        $sources_api = new BeauBot_API_Sources();
+        return $sources_api->build_sources(
+            $this->last_used_chunks,
+            $this->last_top_results,
+            $query,
+            $limit
+        );
     }
 
     /**

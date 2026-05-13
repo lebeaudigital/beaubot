@@ -471,6 +471,9 @@ class BeauBot_API_Endpoints {
         }
         $quota_status = $quota->get_status($user_id);
 
+        // Récupérer les sources utilisées pour cette réponse (max 3 chips numérotés)
+        $sources = $wp_api->get_last_sources($message, 3);
+
         return new WP_REST_Response([
             'success' => true,
             'conversation_id' => $conversation_id,
@@ -478,6 +481,7 @@ class BeauBot_API_Endpoints {
                 'role' => 'assistant',
                 'content' => $response['content'],
             ],
+            'sources' => $sources,
             'usage' => $usage,
             'quota' => $quota_status,
         ], 200);

@@ -427,7 +427,7 @@ if (!defined('ABSPATH')) {
         <p>
             BeauBot v<?php echo esc_html(BEAUBOT_VERSION); ?> | 
             <?php esc_html_e('Propulsé par', 'beaubot'); ?> 
-            <a href="https://openai.com" target="_blank" rel="noopener">OpenAI</a>
+            <a href="https://lebeaudigital.com" target="_blank" rel="noopener">Le Beau Digital</a>
         </p>
     </div>
 </div>

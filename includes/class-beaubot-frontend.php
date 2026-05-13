@@ -73,6 +73,14 @@ class BeauBot_Frontend {
             true
         );
 
+        wp_enqueue_script(
+            'beaubot-api-chat',
+            BEAUBOT_PLUGIN_URL . 'assets/js/api/beaubot-api-chat.js',
+            [],
+            BEAUBOT_VERSION,
+            true
+        );
+
         // Widget compteur de quota dans le header du site
         wp_enqueue_script(
             'beaubot-quota-counter',
@@ -109,10 +117,19 @@ class BeauBot_Frontend {
             true
         );
 
+        // Module dédié à l'affichage des sources sous les réponses IA
+        wp_enqueue_script(
+            'beaubot-sources',
+            BEAUBOT_PLUGIN_URL . 'assets/js/sources.js',
+            [],
+            BEAUBOT_VERSION,
+            true
+        );
+
         wp_enqueue_script(
             'beaubot-chatbot',
             BEAUBOT_PLUGIN_URL . 'assets/js/chatbot.js',
-            ['beaubot-sidebar', 'beaubot-file-upload', 'beaubot-conversation'],
+            ['beaubot-sidebar', 'beaubot-file-upload', 'beaubot-conversation', 'beaubot-api-chat', 'beaubot-sources'],
             BEAUBOT_VERSION,
             true
         );

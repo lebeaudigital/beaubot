@@ -134,41 +134,45 @@
         var self = this;
         this.setLoading(true);
 
-        var body = {
+        var payload = {
             message: message,
             conversation_id: this.conversation ? this.conversation.getCurrentId() : null,
         };
 
         if (imageData) {
-            body.image = imageData;
+            payload.image = imageData;
         }
 
         // Ajouter le profil utilisateur si sélectionné
         if (this.userProfile) {
-            body.user_profile_level = this.userProfile.level;
+            payload.user_profile_level = this.userProfile.level;
         }
 
-        fetch(this.config.restUrl + 'chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-WP-Nonce': this.config.nonce,
-            },
-            body: JSON.stringify(body),
-        })
-        .then(function(response) {
-            return response.json().then(function(data) {
-                if (!response.ok) {
-                    throw new Error(data.message || self.config.strings.error);
-                }
-                return data;
+        // Utiliser le module API dédié (window.BeauBotApiChat) si disponible
+        var request = (window.BeauBotApiChat && typeof window.BeauBotApiChat.sendMessage === 'function')
+            ? window.BeauBotApiChat.sendMessage(this.config, payload)
+            : fetch(this.config.restUrl + 'chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.config.nonce,
+                },
+                body: JSON.stringify(payload),
+            }).then(function(response) {
+                return response.json().then(function(data) {
+                    if (!response.ok) {
+                        throw new Error(data.message || self.config.strings.error);
+                    }
+                    return data;
+                });
             });
-        })
+
+        request
         .then(function(data) {
             if (data.conversation_id && self.conversation) {
                 self.conversation.setCurrentId(data.conversation_id);
             }
-            self.addMessage('assistant', data.message.content, null, data.usage);
+            self.addMessage('assistant', data.message.content, null, data.usage, data.sources);
 
             // Mettre à jour le compteur de quota côté header
             if (data.quota) {
@@ -188,7 +192,7 @@
         });
     };
 
-    BeauBot.prototype.addMessage = function(role, content, imageData, usage) {
+    BeauBot.prototype.addMessage = function(role, content, imageData, usage, sources) {
         if (!this.messagesContainer) return;
 
         var messageEl = document.createElement('div');
@@ -222,6 +226,17 @@
         messageEl.innerHTML = 
             '<div class="beaubot-avatar">' + avatar + '</div>' +
             '<div class="beaubot-message-content">' + contentHtml + '</div>';
+
+        // Injecter le bloc des sources (chips numérotés) sous le contenu de la réponse IA
+        if (role === 'assistant' && sources && window.BeauBotSources && typeof window.BeauBotSources.render === 'function') {
+            var sourcesEl = window.BeauBotSources.render(sources);
+            if (sourcesEl) {
+                var contentContainer = messageEl.querySelector('.beaubot-message-content');
+                if (contentContainer) {
+                    contentContainer.appendChild(sourcesEl);
+                }
+            }
+        }
 
         this.messagesContainer.appendChild(messageEl);
         this.scrollToBottom();
