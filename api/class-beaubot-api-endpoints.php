@@ -343,14 +343,16 @@ class BeauBot_API_Endpoints {
 
         if (!empty($quota_settings['enabled']) && !$quota->can_consume($user_id, $cost)) {
             $status = $quota->get_status($user_id);
+            $is_month = ($status['period'] ?? 'day') === 'month';
+            $template = $is_month
+                /* translators: 1: jetons utilisés, 2: limite */
+                ? __('Limite mensuelle atteinte (%1$d / %2$d). Réessayez le mois prochain.', 'beaubot')
+                /* translators: 1: jetons utilisés, 2: limite */
+                : __('Limite quotidienne atteinte (%1$d / %2$d). Réessayez demain.', 'beaubot');
+
             return new WP_Error(
                 'quota_exceeded',
-                sprintf(
-                    /* translators: 1: jetons utilisés, 2: limite */
-                    __('Limite quotidienne atteinte (%1$d / %2$d). Réessayez demain.', 'beaubot'),
-                    $status['used'],
-                    $status['limit']
-                ),
+                sprintf($template, $status['used'], $status['limit']),
                 [
                     'status' => 429,
                     'quota'  => $status,

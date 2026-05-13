@@ -9,7 +9,16 @@ if (!defined('ABSPATH')) {
 
 $settings = BeauBot_Quota::get_settings();
 $quota    = BeauBot_Quota::get_instance();
-$top      = $quota->get_today_top(20);
+$top      = $quota->get_current_top(20);
+
+$period         = $settings['period'] ?? 'day';
+$is_month       = ($period === 'month');
+$period_noun    = $is_month ? __('mois', 'beaubot') : __('jour', 'beaubot');
+$per_period     = $is_month ? __('par mois', 'beaubot') : __('par jour', 'beaubot');
+$reset_help     = $is_month
+    ? __('Réinitialisation le 1er de chaque mois (selon le fuseau horaire du site).', 'beaubot')
+    : __('Réinitialisation chaque jour à minuit (selon le fuseau horaire du site).', 'beaubot');
+$current_label  = BeauBot_Quota::current_period_label($period);
 ?>
 
 <div class="wrap beaubot-admin-wrap">
@@ -19,7 +28,7 @@ $top      = $quota->get_today_top(20);
     </h1>
 
     <p class="description" style="max-width: 720px;">
-        <?php esc_html_e('Configurez la limite quotidienne de jetons par utilisateur, le coût d\'une requête texte et le coût d\'une requête avec image. Le compteur s\'affiche dans le header du site, à l\'emplacement choisi via un sélecteur CSS.', 'beaubot'); ?>
+        <?php esc_html_e('Configurez la limite de jetons par utilisateur (par jour ou par mois), le coût d\'une requête texte et le coût d\'une requête avec image. Le compteur s\'affiche dans le header du site, à l\'emplacement choisi via un sélecteur CSS.', 'beaubot'); ?>
     </p>
 
     <form method="post" action="options.php">
@@ -53,11 +62,47 @@ $top      = $quota->get_today_top(20);
 
         <!-- Section Limite & Coûts -->
         <div class="beaubot-card">
-            <h2><?php esc_html_e('Limite quotidienne et coûts', 'beaubot'); ?></h2>
+            <h2><?php esc_html_e('Période, limite et coûts', 'beaubot'); ?></h2>
             <table class="form-table">
                 <tr>
                     <th scope="row">
-                        <label for="beaubot_quota_daily_limit"><?php esc_html_e('Limite par jour', 'beaubot'); ?></label>
+                        <label><?php esc_html_e('Période de réinitialisation', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <fieldset>
+                            <label style="margin-right: 18px;">
+                                <input type="radio"
+                                       name="<?php echo esc_attr(BeauBot_Quota::OPTION_NAME); ?>[period]"
+                                       value="day"
+                                       <?php checked($period, 'day'); ?>>
+                                <strong><?php esc_html_e('Par jour', 'beaubot'); ?></strong>
+                                <span class="description"><?php esc_html_e('(remise à zéro chaque nuit)', 'beaubot'); ?></span>
+                            </label>
+                            <label>
+                                <input type="radio"
+                                       name="<?php echo esc_attr(BeauBot_Quota::OPTION_NAME); ?>[period]"
+                                       value="month"
+                                       <?php checked($period, 'month'); ?>>
+                                <strong><?php esc_html_e('Par mois', 'beaubot'); ?></strong>
+                                <span class="description"><?php esc_html_e('(remise à zéro le 1er du mois)', 'beaubot'); ?></span>
+                            </label>
+                        </fieldset>
+                        <p class="description" style="margin-top: 8px;">
+                            <?php echo esc_html($reset_help); ?>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="beaubot_quota_daily_limit">
+                            <?php
+                            echo esc_html(sprintf(
+                                /* translators: %s = "par jour" ou "par mois" */
+                                __('Limite %s', 'beaubot'),
+                                $per_period
+                            ));
+                            ?>
+                        </label>
                     </th>
                     <td>
                         <input type="number"
@@ -67,9 +112,23 @@ $top      = $quota->get_today_top(20);
                                min="1"
                                step="1"
                                class="small-text">
-                        <span><?php esc_html_e('jetons / utilisateur / jour', 'beaubot'); ?></span>
+                        <span>
+                            <?php
+                            echo esc_html(sprintf(
+                                /* translators: %s = "jour" ou "mois" */
+                                __('jetons / utilisateur / %s', 'beaubot'),
+                                $period_noun
+                            ));
+                            ?>
+                        </span>
                         <p class="description">
-                            <?php esc_html_e('Nombre maximal de jetons qu\'un utilisateur peut consommer chaque jour (réinitialisation à minuit selon le fuseau horaire du site).', 'beaubot'); ?>
+                            <?php
+                            echo esc_html(sprintf(
+                                /* translators: %s = "jour" ou "mois" */
+                                __('Nombre maximal de jetons qu\'un utilisateur peut consommer chaque %s.', 'beaubot'),
+                                $period_noun
+                            ));
+                            ?>
                         </p>
                     </td>
                 </tr>
@@ -203,21 +262,41 @@ $top      = $quota->get_today_top(20);
         <?php submit_button(__('Enregistrer les modifications', 'beaubot')); ?>
     </form>
 
-    <!-- Section Top consommateurs du jour -->
+    <!-- Section Top consommateurs sur la période courante -->
     <div class="beaubot-card">
-        <h2><?php esc_html_e('Consommation du jour', 'beaubot'); ?></h2>
+        <h2>
+            <?php
+            echo esc_html(
+                $is_month
+                    ? __('Consommation du mois', 'beaubot')
+                    : __('Consommation du jour', 'beaubot')
+            );
+            ?>
+        </h2>
         <p class="description">
             <?php
             printf(
-                /* translators: %s = aujourd'hui formatée */
-                esc_html__('Top 20 des utilisateurs ayant consommé le plus de jetons aujourd\'hui (%s).', 'beaubot'),
-                esc_html(wp_date(get_option('date_format')))
+                /* translators: 1: période en cours formatée */
+                esc_html(
+                    $is_month
+                        ? __('Top 20 des utilisateurs ayant consommé le plus de jetons ce mois-ci (%s).', 'beaubot')
+                        : __('Top 20 des utilisateurs ayant consommé le plus de jetons aujourd\'hui (%s).', 'beaubot')
+                ),
+                esc_html($current_label)
             );
             ?>
         </p>
 
         <?php if (empty($top)): ?>
-            <p><em><?php esc_html_e('Aucune consommation enregistrée aujourd\'hui.', 'beaubot'); ?></em></p>
+            <p><em>
+                <?php
+                echo esc_html(
+                    $is_month
+                        ? __('Aucune consommation enregistrée pour ce mois-ci.', 'beaubot')
+                        : __('Aucune consommation enregistrée aujourd\'hui.', 'beaubot')
+                );
+                ?>
+            </em></p>
         <?php else: ?>
             <table class="widefat striped" style="max-width: 860px;">
                 <thead>
@@ -260,7 +339,13 @@ $top      = $quota->get_today_top(20);
             <p style="margin-top: 12px;">
                 <button type="button" class="button button-secondary" id="beaubot-reset-all-quota">
                     <span class="dashicons dashicons-update" style="margin-top: 3px;"></span>
-                    <?php esc_html_e('Réinitialiser TOUS les utilisateurs (aujourd\'hui)', 'beaubot'); ?>
+                    <?php
+                    echo esc_html(
+                        $is_month
+                            ? __('Réinitialiser TOUS les utilisateurs (ce mois-ci)', 'beaubot')
+                            : __('Réinitialiser TOUS les utilisateurs (aujourd\'hui)', 'beaubot')
+                    );
+                    ?>
                 </button>
                 <span id="beaubot-reset-quota-status" style="margin-left: 10px;"></span>
             </p>
@@ -302,7 +387,10 @@ $top      = $quota->get_today_top(20);
         var allBtn = e.target.closest('#beaubot-reset-all-quota');
         if (allBtn) {
             e.preventDefault();
-            if (!confirm('<?php echo esc_js(__('Réinitialiser le quota de TOUS les utilisateurs pour aujourd\'hui ?', 'beaubot')); ?>')) return;
+            var confirmMsg = <?php echo $is_month
+                ? "'" . esc_js(__('Réinitialiser le quota de TOUS les utilisateurs pour le mois courant ?', 'beaubot')) . "'"
+                : "'" . esc_js(__('Réinitialiser le quota de TOUS les utilisateurs pour aujourd\'hui ?', 'beaubot')) . "'"; ?>;
+            if (!confirm(confirmMsg)) return;
             resetQuota(0, allBtn, document.getElementById('beaubot-reset-quota-status'));
         }
     });

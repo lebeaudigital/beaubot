@@ -56,6 +56,7 @@ class BeauBot_Quota {
     public static function get_default_settings(): array {
         return [
             'enabled'        => 1,
+            'period'         => 'day', // day | month
             'daily_limit'    => 100,
             'token_name'     => __('Demande', 'beaubot'),
             'token_name_plural' => __('Demandes', 'beaubot'),
@@ -89,6 +90,11 @@ class BeauBot_Quota {
 
         $sanitized = [];
         $sanitized['enabled']           = !empty($input['enabled']) ? 1 : 0;
+
+        $allowed_periods = ['day', 'month'];
+        $period = $input['period'] ?? $defaults['period'];
+        $sanitized['period'] = in_array($period, $allowed_periods, true) ? $period : 'day';
+
         $sanitized['daily_limit']       = max(1, (int) ($input['daily_limit'] ?? $defaults['daily_limit']));
         $sanitized['token_name']        = sanitize_text_field($input['token_name'] ?? $defaults['token_name']);
         $sanitized['token_name_plural'] = sanitize_text_field($input['token_name_plural'] ?? $defaults['token_name_plural']);
@@ -102,6 +108,31 @@ class BeauBot_Quota {
         $sanitized['position'] = in_array($position, $allowed_positions, true) ? $position : 'before';
 
         return $sanitized;
+    }
+
+    /**
+     * Récupère la période en cours selon les réglages.
+     * - 'day'   → date du jour (YYYY-MM-DD)
+     * - 'month' → 1er du mois courant (YYYY-MM-01)
+     */
+    public static function current_period_key(?string $period = null): string {
+        $period = $period ?: (self::get_settings()['period'] ?? 'day');
+        if ($period === 'month') {
+            return wp_date('Y-m-01');
+        }
+        return wp_date('Y-m-d');
+    }
+
+    /**
+     * Libellé humain de la période courante (pour les messages).
+     */
+    public static function current_period_label(?string $period = null): string {
+        $period = $period ?: (self::get_settings()['period'] ?? 'day');
+        if ($period === 'month') {
+            // Ex: "mai 2026"
+            return wp_date('F Y');
+        }
+        return wp_date(get_option('date_format'));
     }
 
     /**
@@ -128,25 +159,18 @@ class BeauBot_Quota {
     }
 
     /**
-     * Date "aujourd'hui" selon le fuseau du site
+     * Obtenir la consommation pour la période en cours (jour ou mois)
      */
-    public static function today(): string {
-        return wp_date('Y-m-d');
-    }
-
-    /**
-     * Obtenir la consommation du jour pour un utilisateur
-     */
-    public function get_today_usage(int $user_id, ?string $date = null): array {
+    public function get_current_usage(int $user_id, ?string $key = null): array {
         global $wpdb;
-        $date = $date ?: self::today();
+        $key = $key ?: self::current_period_key();
         $table = self::get_table_name();
 
         $row = $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT tokens_used, requests_count FROM $table WHERE user_id = %d AND usage_date = %s",
                 $user_id,
-                $date
+                $key
             ),
             ARRAY_A
         );
@@ -162,14 +186,17 @@ class BeauBot_Quota {
      */
     public function get_status(int $user_id): array {
         $settings = self::get_settings();
-        $usage = $this->get_today_usage($user_id);
+        $usage = $this->get_current_usage($user_id);
 
         $limit = (int) $settings['daily_limit'];
         $used  = (int) $usage['tokens_used'];
         $remaining = max(0, $limit - $used);
+        $period = $settings['period'] ?? 'day';
 
         return [
             'enabled'         => (bool) $settings['enabled'],
+            'period'          => $period,
+            'period_label'    => self::current_period_label($period),
             'limit'           => $limit,
             'used'            => $used,
             'remaining'       => $remaining,
@@ -200,7 +227,7 @@ class BeauBot_Quota {
         if (empty($settings['enabled'])) {
             return true;
         }
-        $usage = $this->get_today_usage($user_id);
+        $usage = $this->get_current_usage($user_id);
         return ($usage['tokens_used'] + $cost) <= (int) $settings['daily_limit'];
     }
 
@@ -214,7 +241,7 @@ class BeauBot_Quota {
 
         global $wpdb;
         $table = self::get_table_name();
-        $date  = self::today();
+        $key   = self::current_period_key();
 
         $sql = $wpdb->prepare(
             "INSERT INTO $table (user_id, usage_date, tokens_used, requests_count, updated_at)
@@ -224,7 +251,7 @@ class BeauBot_Quota {
                 requests_count = requests_count + 1,
                 updated_at = VALUES(updated_at)",
             $user_id,
-            $date,
+            $key,
             $cost,
             current_time('mysql')
         );
@@ -233,37 +260,37 @@ class BeauBot_Quota {
     }
 
     /**
-     * Réinitialiser la consommation d'un utilisateur (jour donné ou aujourd'hui)
+     * Réinitialiser la consommation d'un utilisateur sur la période courante
      */
-    public function reset_user(int $user_id, ?string $date = null): bool {
+    public function reset_user(int $user_id, ?string $key = null): bool {
         global $wpdb;
         $table = self::get_table_name();
-        $date  = $date ?: self::today();
+        $key   = $key ?: self::current_period_key();
         return $wpdb->delete($table, [
-            'user_id' => $user_id,
-            'usage_date' => $date,
+            'user_id'    => $user_id,
+            'usage_date' => $key,
         ], ['%d', '%s']) !== false;
     }
 
     /**
-     * Réinitialiser pour TOUS les utilisateurs sur le jour courant
+     * Réinitialiser pour TOUS les utilisateurs sur la période courante
      */
-    public function reset_all_today(): int {
+    public function reset_all_current(): int {
         global $wpdb;
         $table = self::get_table_name();
-        $date  = self::today();
+        $key   = self::current_period_key();
         return (int) $wpdb->query(
-            $wpdb->prepare("DELETE FROM $table WHERE usage_date = %s", $date)
+            $wpdb->prepare("DELETE FROM $table WHERE usage_date = %s", $key)
         );
     }
 
     /**
-     * Obtenir le top des consommateurs du jour (pour l'admin)
+     * Obtenir le top des consommateurs sur la période courante (admin)
      */
-    public function get_today_top(int $limit = 20): array {
+    public function get_current_top(int $limit = 20): array {
         global $wpdb;
         $table = self::get_table_name();
-        $date  = self::today();
+        $key   = self::current_period_key();
 
         $rows = $wpdb->get_results(
             $wpdb->prepare(
@@ -273,7 +300,7 @@ class BeauBot_Quota {
                  WHERE q.usage_date = %s
                  ORDER BY q.tokens_used DESC
                  LIMIT %d",
-                $date,
+                $key,
                 $limit
             ),
             ARRAY_A

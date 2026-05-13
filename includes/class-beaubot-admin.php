@@ -724,9 +724,17 @@ class BeauBot_Admin {
             ]);
         }
 
-        $count = $quota->reset_all_today();
+        $count = $quota->reset_all_current();
+        $settings = BeauBot_Quota::get_settings();
+        $is_month = ($settings['period'] ?? 'day') === 'month';
+
         wp_send_json_success([
-            'message' => sprintf(__('%d ligne(s) supprimée(s) pour aujourd\'hui.', 'beaubot'), $count),
+            'message' => sprintf(
+                $is_month
+                    ? __('%d ligne(s) supprimée(s) pour le mois courant.', 'beaubot')
+                    : __('%d ligne(s) supprimée(s) pour aujourd\'hui.', 'beaubot'),
+                $count
+            ),
         ]);
     }
 }

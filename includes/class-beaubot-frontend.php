@@ -202,6 +202,7 @@ class BeauBot_Frontend {
      */
     private function get_quota_config(): array {
         $quota_settings = BeauBot_Quota::get_settings();
+        $period = $quota_settings['period'] ?? 'day';
 
         return [
             'restUrl'        => rest_url('beaubot/v1/'),
@@ -210,9 +211,19 @@ class BeauBot_Frontend {
             'targetSelector' => $quota_settings['target_selector'] ?? '.header-right',
             'position'       => $quota_settings['position'] ?? 'before',
             'enabled'        => !empty($quota_settings['enabled']),
+            'period'         => $period,
             'strings' => [
-                'reached'  => __('limite atteinte', 'beaubot'),
-                'disabled' => __('limite désactivée', 'beaubot'),
+                'reached'        => __('limite atteinte', 'beaubot'),
+                'disabled'       => __('limite désactivée', 'beaubot'),
+                'tooltipTitle'   => __('Coût d\'une requête', 'beaubot'),
+                'tooltipText'    => __('Texte', 'beaubot'),
+                'tooltipImage'   => __('Image', 'beaubot'),
+                'tooltipUsage'   => __('Utilisation', 'beaubot'),
+                'tooltipResetDay'   => __('Remise à zéro chaque jour à minuit.', 'beaubot'),
+                'tooltipResetMonth' => __('Remise à zéro le 1er de chaque mois.', 'beaubot'),
+                'tokenSingular'  => $quota_settings['token_name'] ?? __('jeton', 'beaubot'),
+                'tokenPlural'    => $quota_settings['token_name_plural'] ?? __('jetons', 'beaubot'),
+                'infoAria'       => __('Détails du quota', 'beaubot'),
             ],
         ];
     }
