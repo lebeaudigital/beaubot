@@ -169,9 +169,18 @@
                 self.conversation.setCurrentId(data.conversation_id);
             }
             self.addMessage('assistant', data.message.content, null, data.usage);
+
+            // Mettre à jour le compteur de quota côté header
+            if (data.quota) {
+                document.dispatchEvent(new CustomEvent('beaubot:quotaUpdated', { detail: data.quota }));
+            } else {
+                document.dispatchEvent(new CustomEvent('beaubot:quotaRefresh'));
+            }
         })
         .catch(function(error) {
             console.error('BeauBot: API Error', error);
+            // Forcer un refresh du quota en cas d'erreur (peut être 429 = limite atteinte)
+            document.dispatchEvent(new CustomEvent('beaubot:quotaRefresh'));
             self.showError(error.message || self.config.strings.networkError);
         })
         .finally(function() {

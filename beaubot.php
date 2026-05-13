@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.6.1
+ * Version: 1.7.0
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.6.1');
+define('BEAUBOT_VERSION', '1.7.0');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -69,6 +69,7 @@ class BeauBot {
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-frontend.php';
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-conversation.php';
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-image.php';
+        require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-quota.php';
         require_once BEAUBOT_PLUGIN_DIR . 'includes/class-beaubot-updater.php';
         
         // Classes API
@@ -136,11 +137,13 @@ class BeauBot {
         // Vérifier si les tables existent
         $table_messages = $wpdb->prefix . 'beaubot_messages';
         $table_chunks = $wpdb->prefix . 'beaubot_content_chunks';
-        
+        $table_quota = $wpdb->prefix . 'beaubot_quota';
+
         $messages_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_messages));
         $chunks_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_chunks));
-        
-        if (!$messages_exists || !$chunks_exists) {
+        $quota_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_quota));
+
+        if (!$messages_exists || !$chunks_exists || !$quota_exists) {
             error_log("[BeauBot] Tables not found, creating them now...");
             $this->create_tables();
             error_log("[BeauBot] Tables created successfully.");
@@ -308,6 +311,11 @@ class BeauBot {
         dbDelta($sql_messages);
         dbDelta($sql_images);
         dbDelta($sql_chunks);
+
+        // Table de quota (déléguée à la classe dédiée)
+        if (class_exists('BeauBot_Quota')) {
+            BeauBot_Quota::create_table();
+        }
     }
 }
 

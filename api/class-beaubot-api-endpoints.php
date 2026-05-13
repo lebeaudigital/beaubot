@@ -190,6 +190,13 @@ class BeauBot_API_Endpoints {
             ],
         ]);
 
+        // Quota / Limite quotidienne (utilisateur connecté)
+        register_rest_route(self::NAMESPACE, '/quota', [
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_quota_status'],
+            'permission_callback' => [$this, 'check_user_permission'],
+        ]);
+
         // Test API (admin uniquement)
         register_rest_route(self::NAMESPACE, '/test-api', [
             'methods' => WP_REST_Server::READABLE,
@@ -328,6 +335,29 @@ class BeauBot_API_Endpoints {
         $image_data = $request->get_param('image');
         $user_profile_level = $request->get_param('user_profile_level');
 
+        // Vérification du quota AVANT tout traitement coûteux
+        $quota = BeauBot_Quota::get_instance();
+        $has_image = !empty($image_data);
+        $cost = $quota->calculate_cost($has_image);
+        $quota_settings = BeauBot_Quota::get_settings();
+
+        if (!empty($quota_settings['enabled']) && !$quota->can_consume($user_id, $cost)) {
+            $status = $quota->get_status($user_id);
+            return new WP_Error(
+                'quota_exceeded',
+                sprintf(
+                    /* translators: 1: jetons utilisés, 2: limite */
+                    __('Limite quotidienne atteinte (%1$d / %2$d). Réessayez demain.', 'beaubot'),
+                    $status['used'],
+                    $status['limit']
+                ),
+                [
+                    'status' => 429,
+                    'quota'  => $status,
+                ]
+            );
+        }
+
         $conversation_handler = new BeauBot_Conversation();
         $image_handler = new BeauBot_Image();
         $chatgpt = new BeauBot_API_ChatGPT();
@@ -433,6 +463,12 @@ class BeauBot_API_Endpoints {
             $response['model'] ?? null
         );
 
+        // Décompter le quota uniquement si activé (réponse OK)
+        if (!empty($quota_settings['enabled'])) {
+            $quota->consume($user_id, $cost);
+        }
+        $quota_status = $quota->get_status($user_id);
+
         return new WP_REST_Response([
             'success' => true,
             'conversation_id' => $conversation_id,
@@ -441,6 +477,20 @@ class BeauBot_API_Endpoints {
                 'content' => $response['content'],
             ],
             'usage' => $usage,
+            'quota' => $quota_status,
+        ], 200);
+    }
+
+    /**
+     * Obtenir l'état du quota pour l'utilisateur courant
+     */
+    public function get_quota_status(WP_REST_Request $request): WP_REST_Response {
+        $user_id = get_current_user_id();
+        $quota   = BeauBot_Quota::get_instance();
+
+        return new WP_REST_Response([
+            'success' => true,
+            'quota'   => $quota->get_status($user_id),
         ], 200);
     }
 

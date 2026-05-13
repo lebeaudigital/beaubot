@@ -598,3 +598,68 @@
         gap: 12px;
     }
 }
+
+/* ========================================
+   Quota / Limite admin
+   ======================================== */
+
+.beaubot-switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 24px;
+    vertical-align: middle;
+}
+
+.beaubot-switch input[type="checkbox"] {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.beaubot-switch-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #cbd5e1;
+    border-radius: 999px;
+    transition: background-color 0.2s ease;
+}
+
+.beaubot-switch-slider::before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.beaubot-switch input[type="checkbox"]:checked + .beaubot-switch-slider {
+    background-color: #6366f1;
+}
+
+.beaubot-switch input[type="checkbox"]:checked + .beaubot-switch-slider::before {
+    transform: translateX(22px);
+}
+
+.beaubot-quota-mini-bar {
+    margin-top: 4px;
+    width: 120px;
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.beaubot-quota-mini-bar > span {
+    display: block;
+    height: 100%;
+    background: #6366f1;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}

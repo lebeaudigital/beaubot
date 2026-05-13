@@ -59,6 +59,9 @@ class BeauBot_Admin {
         
         // AJAX pour le diagnostic
         add_action('wp_ajax_beaubot_diagnostics', [$this, 'ajax_diagnostics']);
+
+        // AJAX pour réinitialiser le quota d'un utilisateur (ou tous)
+        add_action('wp_ajax_beaubot_reset_quota', [$this, 'ajax_reset_quota']);
     }
 
     /**
@@ -185,6 +188,15 @@ class BeauBot_Admin {
             'beaubot-statistics',
             [$this, 'render_statistics_page']
         );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Limites & Quota', 'beaubot'),
+            __('Limites & Quota', 'beaubot'),
+            'manage_options',
+            'beaubot-quota',
+            [$this, 'render_quota_page']
+        );
     }
 
     /**
@@ -208,6 +220,17 @@ class BeauBot_Admin {
                 'type' => 'array',
                 'sanitize_callback' => [$this, 'sanitize_suggestions'],
                 'default' => [],
+            ]
+        );
+
+        // Réglages du quota / limite quotidienne
+        register_setting(
+            'beaubot_quota_group',
+            BeauBot_Quota::OPTION_NAME,
+            [
+                'type' => 'array',
+                'sanitize_callback' => ['BeauBot_Quota', 'sanitize_settings'],
+                'default' => BeauBot_Quota::get_default_settings(),
             ]
         );
 
@@ -667,5 +690,43 @@ class BeauBot_Admin {
         }
 
         include BEAUBOT_PLUGIN_DIR . 'templates/admin/statistics-page.php';
+    }
+
+    /**
+     * Rendre la page de gestion du quota / limite quotidienne
+     */
+    public function render_quota_page(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        settings_errors('beaubot_quota_messages');
+        include BEAUBOT_PLUGIN_DIR . 'templates/admin/quota-page.php';
+    }
+
+    /**
+     * AJAX : réinitialiser le quota (utilisateur précis ou tous aujourd'hui)
+     */
+    public function ajax_reset_quota(): void {
+        check_ajax_referer('beaubot_admin_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Accès non autorisé.', 'beaubot')]);
+        }
+
+        $user_id = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
+        $quota = BeauBot_Quota::get_instance();
+
+        if ($user_id > 0) {
+            $quota->reset_user($user_id);
+            wp_send_json_success([
+                'message' => sprintf(__('Quota réinitialisé pour l\'utilisateur #%d.', 'beaubot'), $user_id),
+            ]);
+        }
+
+        $count = $quota->reset_all_today();
+        wp_send_json_success([
+            'message' => sprintf(__('%d ligne(s) supprimée(s) pour aujourd\'hui.', 'beaubot'), $count),
+        ]);
     }
 }

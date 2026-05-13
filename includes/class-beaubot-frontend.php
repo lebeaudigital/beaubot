@@ -64,6 +64,26 @@ class BeauBot_Frontend {
             BEAUBOT_VERSION
         );
 
+        // JS - API modules (toujours chargés en premier)
+        wp_enqueue_script(
+            'beaubot-api-quota',
+            BEAUBOT_PLUGIN_URL . 'assets/js/api/beaubot-api-quota.js',
+            [],
+            BEAUBOT_VERSION,
+            true
+        );
+
+        // Widget compteur de quota dans le header du site
+        wp_enqueue_script(
+            'beaubot-quota-counter',
+            BEAUBOT_PLUGIN_URL . 'assets/js/quota-counter.js',
+            ['beaubot-api-quota'],
+            BEAUBOT_VERSION,
+            true
+        );
+
+        wp_localize_script('beaubot-quota-counter', 'beaubotQuotaConfig', $this->get_quota_config());
+
         // JS - Modules ES6
         wp_enqueue_script(
             'beaubot-sidebar',
@@ -172,6 +192,27 @@ class BeauBot_Frontend {
                 'settings' => __('Paramètres', 'beaubot'),
                 'positionLeft' => __('Sidebar à gauche', 'beaubot'),
                 'positionRight' => __('Sidebar à droite', 'beaubot'),
+            ],
+        ];
+    }
+
+    /**
+     * Construire la config JS pour le widget Quota
+     * @return array
+     */
+    private function get_quota_config(): array {
+        $quota_settings = BeauBot_Quota::get_settings();
+
+        return [
+            'restUrl'        => rest_url('beaubot/v1/'),
+            'nonce'          => wp_create_nonce('wp_rest'),
+            'userLoggedIn'   => is_user_logged_in(),
+            'targetSelector' => $quota_settings['target_selector'] ?? '.header-right',
+            'position'       => $quota_settings['position'] ?? 'before',
+            'enabled'        => !empty($quota_settings['enabled']),
+            'strings' => [
+                'reached'  => __('limite atteinte', 'beaubot'),
+                'disabled' => __('limite désactivée', 'beaubot'),
             ],
         ];
     }
