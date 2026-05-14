@@ -12,7 +12,8 @@
         this.container = null;
         this.overlay = null;
         this.toggleButton = null;
-        
+        this.outsideClickHandler = null;
+
         this.init();
     };
 
@@ -112,6 +113,8 @@
             setTimeout(function() { input.focus(); }, 300);
         }
 
+        this.enableOutsideClick();
+
         this.dispatchEvent('open');
     };
 
@@ -125,7 +128,48 @@
 
         localStorage.setItem('beaubot_sidebar_open', 'false');
 
+        this.disableOutsideClick();
+
         this.dispatchEvent('close');
+    };
+
+    /**
+     * Activer la détection des clics en dehors du volet
+     * pour le fermer automatiquement.
+     */
+    BeauBotSidebar.prototype.enableOutsideClick = function() {
+        if (this.outsideClickHandler) return;
+
+        var self = this;
+        this.outsideClickHandler = function(e) {
+            if (!self.isOpen || !self.container) return;
+
+            // Ignorer les clics dans le volet lui-même
+            if (self.container.contains(e.target)) return;
+
+            // Ignorer les clics sur le bouton d'ouverture (géré par toggle)
+            if (self.toggleButton && self.toggleButton.contains(e.target)) return;
+
+            // Ignorer les clics dans l'overlay (déjà géré séparément)
+            if (self.overlay && self.overlay.contains(e.target)) return;
+
+            self.close();
+        };
+
+        // mousedown permet de fermer dès le début du clic, comme un menu/modal
+        document.addEventListener('mousedown', this.outsideClickHandler);
+        document.addEventListener('touchstart', this.outsideClickHandler, { passive: true });
+    };
+
+    /**
+     * Désactiver la détection des clics extérieurs.
+     */
+    BeauBotSidebar.prototype.disableOutsideClick = function() {
+        if (!this.outsideClickHandler) return;
+
+        document.removeEventListener('mousedown', this.outsideClickHandler);
+        document.removeEventListener('touchstart', this.outsideClickHandler);
+        this.outsideClickHandler = null;
     };
 
     BeauBotSidebar.prototype.toggle = function() {
