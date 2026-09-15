@@ -5,7 +5,7 @@
  * en utilisant les Text Fragments du navigateur (#:~:text=...) pour scroller
  * directement vers le passage qui répond le mieux à la question.
  *
- * Expose : window.BeauBotSources = { render }
+ * Expose : window.BeauBotSources = { render, decorateAnchors, enrichHref }
  */
 (function () {
     'use strict';
@@ -139,7 +139,83 @@
         return tip;
     }
 
+    /**
+     * Remplacer les href des liens d'un message par les URL ancrées des sources.
+     * @param {HTMLElement} container
+     * @param {Array<object>} sources
+     */
+    function decorateAnchors(container, sources) {
+        if (!container || !Array.isArray(sources) || sources.length === 0) {
+            return;
+        }
+
+        const anchors = container.querySelectorAll('a[href]');
+        for (let i = 0; i < anchors.length; i++) {
+            const resolved = enrichHref(anchors[i].getAttribute('href'), anchors[i].textContent, sources);
+            if (resolved) {
+                anchors[i].setAttribute('href', resolved);
+            }
+        }
+    }
+
+    /**
+     * Résoudre un href vers l'URL ancrée de la source correspondante.
+     * @param {string} href
+     * @param {string} label
+     * @param {Array<object>} sources
+     * @returns {string}
+     */
+    function enrichHref(href, label, sources) {
+        if (!href || !Array.isArray(sources)) {
+            return href;
+        }
+        if (href.indexOf(':~:text=') !== -1 || href.indexOf('beaubot_hl=') !== -1) {
+            return href;
+        }
+
+        const norm = normalizeUrl(href);
+        for (let i = 0; i < sources.length; i++) {
+            const pageUrl = sources[i].page_url || '';
+            const anchored = sources[i].url || '';
+            if (anchored && pageUrl && normalizeUrl(pageUrl) === norm) {
+                return anchored;
+            }
+        }
+
+        const labelNorm = (label || '').trim().toLowerCase();
+        if (labelNorm) {
+            for (let j = 0; j < sources.length; j++) {
+                const title = (sources[j].title || '').trim().toLowerCase();
+                if (title && sources[j].url && (labelNorm.indexOf(title) !== -1 || title.indexOf(labelNorm) !== -1)) {
+                    return sources[j].url;
+                }
+            }
+        }
+
+        return href;
+    }
+
+    /**
+     * @param {string} url
+     * @returns {string}
+     */
+    function normalizeUrl(url) {
+        try {
+            const parsed = new URL(url, window.location.origin);
+            let host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+            let path = decodeURIComponent(parsed.pathname || '/').replace(/\/+$/, '');
+            if (!path) {
+                path = '/';
+            }
+            return host + path;
+        } catch (e) {
+            return String(url).split('#')[0].replace(/[?&]beaubot_hl=[^&]*/g, '').replace(/\/+$/, '').toLowerCase();
+        }
+    }
+
     window.BeauBotSources = {
         render: render,
+        decorateAnchors: decorateAnchors,
+        enrichHref: enrichHref,
     };
 })();

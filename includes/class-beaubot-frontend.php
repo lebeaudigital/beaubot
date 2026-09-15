@@ -126,10 +126,28 @@ class BeauBot_Frontend {
             true
         );
 
+        // Stream des réponses à vitesse de lecture
+        wp_enqueue_script(
+            'beaubot-stream',
+            BEAUBOT_PLUGIN_URL . 'assets/js/stream.js',
+            [],
+            BEAUBOT_VERSION,
+            true
+        );
+
+        // Scroll vers le paragraphe cité (?beaubot_hl= / Text Fragments)
+        wp_enqueue_script(
+            'beaubot-deep-link',
+            BEAUBOT_PLUGIN_URL . 'assets/js/deep-link.js',
+            [],
+            BEAUBOT_VERSION,
+            true
+        );
+
         wp_enqueue_script(
             'beaubot-chatbot',
             BEAUBOT_PLUGIN_URL . 'assets/js/chatbot.js',
-            ['beaubot-sidebar', 'beaubot-file-upload', 'beaubot-conversation', 'beaubot-api-chat', 'beaubot-sources'],
+            ['beaubot-sidebar', 'beaubot-file-upload', 'beaubot-conversation', 'beaubot-api-chat', 'beaubot-sources', 'beaubot-stream'],
             BEAUBOT_VERSION,
             true
         );

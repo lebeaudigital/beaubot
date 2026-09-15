@@ -453,12 +453,23 @@ class BeauBot_API_Endpoints {
         $tokens_input = $usage['prompt_tokens'] ?? null;
         $tokens_output = $usage['completion_tokens'] ?? null;
 
+        // Sources + liens ancrés vers le paragraphe cité (avant enregistrement)
+        $sources = $wp_api->get_last_sources($message, 3);
+        $assistant_content = $response['content'];
+        if (!empty($sources)) {
+            if (!class_exists('BeauBot_API_Sources')) {
+                require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-sources.php';
+            }
+            $sources_api = new BeauBot_API_Sources();
+            $assistant_content = $sources_api->enrich_message_links($assistant_content, $sources);
+        }
+
         // Enregistrer la réponse de l'assistant avec les tokens et le modèle
         $conversation_handler->add_message(
             $conversation_id, 
             $user_id, 
             'assistant', 
-            $response['content'],
+            $assistant_content,
             null,
             $tokens_input ? (int) $tokens_input : null,
             $tokens_output ? (int) $tokens_output : null,
@@ -471,15 +482,12 @@ class BeauBot_API_Endpoints {
         }
         $quota_status = $quota->get_status($user_id);
 
-        // Récupérer les sources utilisées pour cette réponse (max 3 chips numérotés)
-        $sources = $wp_api->get_last_sources($message, 3);
-
         return new WP_REST_Response([
             'success' => true,
             'conversation_id' => $conversation_id,
             'message' => [
                 'role' => 'assistant',
-                'content' => $response['content'],
+                'content' => $assistant_content,
             ],
             'sources' => $sources,
             'usage' => $usage,

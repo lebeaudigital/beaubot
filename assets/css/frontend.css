@@ -472,6 +472,41 @@
     color: var(--beaubot-primary);
 }
 
+.beaubot-assistant .beaubot-message-text.beaubot-is-streaming {
+    cursor: pointer;
+}
+
+.beaubot-stream-caret {
+    display: inline-block;
+    width: 2px;
+    height: 0.95em;
+    margin-left: 2px;
+    background: var(--beaubot-primary);
+    vertical-align: text-bottom;
+    animation: beaubot-caret-blink 0.85s step-end infinite;
+}
+
+@keyframes beaubot-caret-blink {
+    50% {
+        opacity: 0;
+    }
+}
+
+.beaubot-reveal-later:not(.beaubot-revealed) {
+    opacity: 0;
+    visibility: hidden;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+}
+
+.beaubot-reveal-later.beaubot-revealed {
+    opacity: 1;
+    visibility: visible;
+}
+
 /* Image dans le message */
 .beaubot-message-image {
     max-width: 250px;
@@ -1540,6 +1575,20 @@
     .beaubot-quota-widget .beaubot-quota-info:focus .beaubot-quota-tooltip {
         transform: translate(-50%, 0);
     }
+}
+
+/* Surlignage du paragraphe cible (deep link / Text Fragment fallback) */
+.beaubot-hl-target {
+    scroll-margin-top: 120px;
+    background-color: rgba(250, 204, 21, 0.38) !important;
+    box-shadow: 0 0 0 8px rgba(250, 204, 21, 0.38);
+    border-radius: 4px;
+    transition: background-color 1.4s ease, box-shadow 1.4s ease;
+}
+
+.beaubot-hl-target.beaubot-hl-fade {
+    background-color: transparent !important;
+    box-shadow: none;
 }
 
 /* ========================================

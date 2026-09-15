@@ -29,7 +29,12 @@ class BeauBot_API_Sources {
     /**
      * Nombre maximum de mots dans le snippet ancré (équilibre unicité / robustesse).
      */
-    private const SNIPPET_MAX_WORDS = 12;
+    private const SNIPPET_MAX_WORDS = 16;
+
+    /**
+     * Longueur max du paramètre ?beaubot_hl= (recherche DOM sur la page cible).
+     */
+    private const HIGHLIGHT_MAX_CHARS = 180;
 
     /**
      * Longueur maximum (caractères) de l'extrait visible dans la chip tooltip.
@@ -108,10 +113,11 @@ class BeauBot_API_Sources {
         // ajouté par index_content(). On extrait uniquement la partie texte.
         $body = $this->strip_chunk_prefix($chunk['content'] ?? '');
 
-        $snippet = $this->extract_best_snippet($body, $query);
+        $paragraph = $this->extract_best_paragraph($body, $query);
+        $snippet = $this->extract_best_snippet($paragraph !== '' ? $paragraph : $body, $query);
         $preview = $this->build_preview($body, $snippet);
 
-        $anchor_url = $this->build_text_fragment_url($url, $snippet);
+        $anchor_url = $this->build_anchored_url($url, $paragraph, $snippet);
 
         return [
             'rank'         => $rank,
@@ -142,6 +148,43 @@ class BeauBot_API_Sources {
     }
 
     /**
+     * Extraire le paragraphe le plus pertinent (pour ancrer start,end).
+     *
+     * @param string $body
+     * @param string $query
+     * @return string
+     */
+    private function extract_best_paragraph(string $body, string $query): string {
+        $body = trim($body);
+        if ($body === '') {
+            return '';
+        }
+
+        $paragraphs = preg_split('/\n{2,}|\n+/u', $body) ?: [];
+        $paragraphs = array_values(array_filter(array_map('trim', $paragraphs), function ($p) {
+            return mb_strlen($p) >= 20;
+        }));
+
+        if (empty($paragraphs)) {
+            return $this->normalize_for_fragment($body);
+        }
+
+        $keywords = $this->extract_keywords($query);
+        $best = $paragraphs[0];
+        $best_score = -1;
+
+        foreach ($paragraphs as $paragraph) {
+            $score = $this->score_sentence($paragraph, $keywords);
+            if ($score > $best_score) {
+                $best_score = $score;
+                $best = $paragraph;
+            }
+        }
+
+        return $this->normalize_for_fragment($best);
+    }
+
+    /**
      * Extraire le meilleur snippet (suite de mots) à utiliser comme ancre.
      * Stratégie :
      * 1. Découper le texte en phrases.
@@ -154,7 +197,7 @@ class BeauBot_API_Sources {
      * @return string Snippet (suite de mots à matcher avec Text Fragments).
      */
     private function extract_best_snippet(string $body, string $query): string {
-        $body = trim(preg_replace('/\s+/u', ' ', $body));
+        $body = $this->normalize_for_fragment($body);
         if (empty($body)) {
             return '';
         }
@@ -319,31 +362,191 @@ class BeauBot_API_Sources {
     }
 
     /**
-     * Construire une URL avec Text Fragment (#:~:text=...).
-     * RFC : https://wicg.github.io/scroll-to-text-fragment/
+     * Construire une URL ancrée : ?beaubot_hl= + Text Fragment start,end.
+     * RFC Text Fragments : https://wicg.github.io/scroll-to-text-fragment/
      *
-     * @param string $page_url URL de la page source.
-     * @param string $snippet  Texte à surligner.
-     * @return string URL finale (avec ou sans Text Fragment selon l'unicité du snippet).
+     * start,end permet de cibler tout le paragraphe même si le milieu varie légèrement.
+     * ?beaubot_hl= sert de secours JS sur le même site.
+     *
+     * @param string $page_url   URL de la page source.
+     * @param string $paragraph  Paragraphe pertinent (pour le range).
+     * @param string $snippet    Extrait court (recherche DOM).
+     * @return string
      */
-    private function build_text_fragment_url(string $page_url, string $snippet): string {
-        $word_count = $snippet ? count(preg_split('/\s+/u', trim($snippet))) : 0;
+    public function build_anchored_url(string $page_url, string $paragraph, string $snippet): string {
+        $base = explode('#', $page_url, 2)[0];
 
-        // Si le snippet est trop court, on n'ancre pas pour éviter les faux positifs
-        if ($word_count < self::SNIPPET_MIN_WORDS) {
-            return $page_url;
+        $highlight = $this->normalize_for_fragment($snippet !== '' ? $snippet : $paragraph);
+        if (mb_strlen($highlight) > self::HIGHLIGHT_MAX_CHARS) {
+            $highlight = mb_substr($highlight, 0, self::HIGHLIGHT_MAX_CHARS, 'UTF-8');
+            $highlight = trim((string) preg_replace('/\s+\S*$/u', '', $highlight));
         }
 
-        // Le format Text Fragment : #:~:text=... ; remplace les fragments existants
-        // L'encodage URL doit être conforme à RFC 3986. rawurlencode() encode aussi
-        // les caractères réservés (=, &, #) ce qui est exactement ce qu'on veut.
-        $encoded = rawurlencode($snippet);
+        $word_count = $highlight !== '' ? count(preg_split('/\s+/u', $highlight)) : 0;
+        if ($word_count >= self::SNIPPET_MIN_WORDS) {
+            $base = add_query_arg('beaubot_hl', $highlight, $base);
+        }
 
-        // Si une URL contient déjà un fragment classique, on l'écrase volontairement
-        // car le Text Fragment a la priorité pour le scroll-to-text.
-        $base = strtok($page_url, '#');
+        $range = $this->fragment_range($paragraph !== '' ? $paragraph : $highlight);
+        if ($range['start'] === '') {
+            return $base;
+        }
 
-        return $base . '#:~:text=' . $encoded;
+        $fragment = '#:~:text=' . rawurlencode($range['start']);
+        if ($range['end'] !== '') {
+            $fragment .= ',' . rawurlencode($range['end']);
+        }
+
+        return $base . $fragment;
+    }
+
+    /**
+     * Enrichir les liens Markdown d'une réponse avec les URL ancrées des sources.
+     *
+     * @param string $content Texte Markdown renvoyé par le modèle.
+     * @param array  $sources Sources déjà construites (avec url + page_url + title).
+     * @return string
+     */
+    public function enrich_message_links(string $content, array $sources): string {
+        if ($content === '' || empty($sources)) {
+            return $content;
+        }
+
+        return (string) preg_replace_callback(
+            '/\[([^\]]+)\]\(([^)]+)\)/',
+            function (array $matches) use ($sources) {
+                $label = $matches[1];
+                $href = $matches[2];
+                $resolved = $this->resolve_source_url($href, $label, $sources);
+                return '[' . $label . '](' . $resolved . ')';
+            },
+            $content
+        );
+    }
+
+    /**
+     * Trouver l'URL ancrée correspondant à un lien (URL ou titre de page).
+     *
+     * @param string $href
+     * @param string $label
+     * @param array  $sources
+     * @return string
+     */
+    private function resolve_source_url(string $href, string $label, array $sources): string {
+        if (str_contains($href, ':~:text=') || str_contains($href, 'beaubot_hl=')) {
+            return $href;
+        }
+
+        foreach ($sources as $source) {
+            $page_url = $source['page_url'] ?? '';
+            $anchored = $source['url'] ?? '';
+            if ($anchored === '') {
+                continue;
+            }
+            if ($page_url !== '' && $this->urls_match($href, $page_url)) {
+                return $anchored;
+            }
+        }
+
+        $label_norm = mb_strtolower(trim($label), 'UTF-8');
+        if ($label_norm !== '') {
+            foreach ($sources as $source) {
+                $title = mb_strtolower(trim((string) ($source['title'] ?? '')), 'UTF-8');
+                if ($title !== '' && (str_contains($label_norm, $title) || str_contains($title, $label_norm))) {
+                    return $source['url'];
+                }
+            }
+        }
+
+        return $href;
+    }
+
+    /**
+     * Comparer deux URL (hôte sans www, chemin sans slash final).
+     */
+    private function urls_match(string $a, string $b): bool {
+        return $this->normalize_url($a) !== '' && $this->normalize_url($a) === $this->normalize_url($b);
+    }
+
+    /**
+     * @param string $url
+     * @return string
+     */
+    private function normalize_url(string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $url = explode('#', $url, 2)[0];
+        $url = preg_replace('/([?&])beaubot_hl=[^&]*/', '$1', $url) ?? $url;
+        $url = preg_replace('/[?&]$/', '', $url) ?? $url;
+
+        $parts = wp_parse_url($url);
+        if (!is_array($parts)) {
+            return mb_strtolower($url, 'UTF-8');
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+        $path = rawurldecode((string) ($parts['path'] ?? '/'));
+        $path = untrailingslashit($path);
+        if ($path === '') {
+            $path = '/';
+        }
+
+        return $host . $path;
+    }
+
+    /**
+     * Normaliser un extrait pour qu'il corresponde au texte visible de la page.
+     */
+    private function normalize_for_fragment(string $text): string {
+        $text = str_replace(["\xc2\xa0", "\xe2\x80\x89", "\xe2\x80\xaf"], ' ', $text);
+        $text = strtr($text, [
+            "\u{2018}" => "'",
+            "\u{2019}" => "'",
+            "\u{201c}" => '"',
+            "\u{201d}" => '"',
+            "\u{2013}" => '-',
+            "\u{2014}" => '-',
+        ]);
+        $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+        return trim($text);
+    }
+
+    /**
+     * Déduire start / end d'un Text Fragment à partir d'un paragraphe.
+     *
+     * @param string $paragraph
+     * @return array{start: string, end: string}
+     */
+    private function fragment_range(string $paragraph): array {
+        $paragraph = $this->normalize_for_fragment($paragraph);
+        $words = preg_split('/\s+/u', $paragraph) ?: [];
+        $words = array_values(array_filter($words, fn($w) => $w !== ''));
+        $count = count($words);
+
+        if ($count === 0) {
+            return ['start' => '', 'end' => ''];
+        }
+
+        if ($count <= 8) {
+            $start = rtrim(implode(' ', $words), " ,;:.\t");
+            $start = ltrim($start, '-');
+            return ['start' => $start, 'end' => ''];
+        }
+
+        $edge = min(7, max(4, (int) floor($count / 5)));
+        $start = rtrim(implode(' ', array_slice($words, 0, $edge)), " ,;:.\t");
+        $end = rtrim(implode(' ', array_slice($words, -$edge)), " ,;:.\t");
+        $start = ltrim($start, '-');
+
+        if ($start === '' || $start === $end) {
+            return ['start' => $start, 'end' => ''];
+        }
+
+        return ['start' => $start, 'end' => $end];
     }
 
     /**

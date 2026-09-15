@@ -13,6 +13,7 @@
         this.conversation = null;
         this.isLoading = false;
         this.userProfile = null; // Profil sélectionné par l'utilisateur
+        this.activeStream = null;
         
         this.messagesContainer = null;
         this.inputField = null;
@@ -118,6 +119,8 @@
         if (!message && !imageData) return;
         if (this.isLoading) return;
 
+        this.finishActiveStream();
+
         this.hideSuggestions();
         this.addMessage('user', message, imageData);
 
@@ -172,7 +175,7 @@
             if (data.conversation_id && self.conversation) {
                 self.conversation.setCurrentId(data.conversation_id);
             }
-            self.addMessage('assistant', data.message.content, null, data.usage, data.sources);
+            self.addMessage('assistant', data.message.content, null, data.usage, data.sources, { stream: true });
 
             // Mettre à jour le compteur de quota côté header
             if (data.quota) {
@@ -192,9 +195,11 @@
         });
     };
 
-    BeauBot.prototype.addMessage = function(role, content, imageData, usage, sources) {
+    BeauBot.prototype.addMessage = function(role, content, imageData, usage, sources, options) {
         if (!this.messagesContainer) return;
 
+        options = options || {};
+        var self = this;
         var messageEl = document.createElement('div');
         messageEl.className = 'beaubot-message beaubot-' + role;
 
@@ -209,14 +214,14 @@
         }
         
         if (content) {
-            contentHtml += '<div class="beaubot-message-text">' + this.formatMessage(content) + '</div>';
+            contentHtml += '<div class="beaubot-message-text"></div>';
         }
 
         if (role === 'assistant' && usage) {
             var tokensIn = usage.prompt_tokens;
             var tokensOut = usage.completion_tokens;
             if (tokensIn || tokensOut) {
-                contentHtml += '<div class="beaubot-usage-info">';
+                contentHtml += '<div class="beaubot-usage-info beaubot-reveal-later">';
                 if (tokensIn) contentHtml += '<span>In: ' + Number(tokensIn).toLocaleString() + '</span>';
                 if (tokensOut) contentHtml += '<span>Out: ' + Number(tokensOut).toLocaleString() + '</span>';
                 contentHtml += '</div>';
@@ -227,19 +232,69 @@
             '<div class="beaubot-avatar">' + avatar + '</div>' +
             '<div class="beaubot-message-content">' + contentHtml + '</div>';
 
+        var contentContainer = messageEl.querySelector('.beaubot-message-content');
+        var textEl = messageEl.querySelector('.beaubot-message-text');
+        var formatted = content ? this.formatMessage(content) : '';
+
+        if (role === 'assistant' && formatted && sources && window.BeauBotSources && typeof window.BeauBotSources.decorateAnchors === 'function') {
+            var linkHost = document.createElement('div');
+            linkHost.innerHTML = formatted;
+            window.BeauBotSources.decorateAnchors(linkHost, sources);
+            formatted = linkHost.innerHTML;
+        }
+
         // Injecter le bloc des sources (chips numérotés) sous le contenu de la réponse IA
         if (role === 'assistant' && sources && window.BeauBotSources && typeof window.BeauBotSources.render === 'function') {
             var sourcesEl = window.BeauBotSources.render(sources);
-            if (sourcesEl) {
-                var contentContainer = messageEl.querySelector('.beaubot-message-content');
-                if (contentContainer) {
-                    contentContainer.appendChild(sourcesEl);
-                }
+            if (sourcesEl && contentContainer) {
+                sourcesEl.classList.add('beaubot-reveal-later');
+                contentContainer.appendChild(sourcesEl);
             }
         }
 
         this.messagesContainer.appendChild(messageEl);
+
+        var shouldStream = role === 'assistant'
+            && options.stream
+            && formatted
+            && window.BeauBotStream
+            && typeof window.BeauBotStream.play === 'function';
+
+        var revealMeta = function() {
+            var delayed = messageEl.querySelectorAll('.beaubot-reveal-later');
+            for (var i = 0; i < delayed.length; i++) {
+                delayed[i].classList.add('beaubot-revealed');
+            }
+            if (textEl) {
+                textEl.removeAttribute('title');
+            }
+            self.activeStream = null;
+            self.scrollToBottom();
+        };
+
+        if (shouldStream && textEl) {
+            textEl.setAttribute('title', 'Cliquer pour afficher toute la réponse');
+            this.activeStream = window.BeauBotStream.play(textEl, formatted, {
+                onTick: function() {
+                    self.scrollToBottom();
+                },
+                onDone: revealMeta,
+            });
+        } else {
+            if (textEl) {
+                textEl.innerHTML = formatted;
+            }
+            revealMeta();
+        }
+
         this.scrollToBottom();
+    };
+
+    BeauBot.prototype.finishActiveStream = function() {
+        if (this.activeStream && typeof this.activeStream.finish === 'function') {
+            this.activeStream.finish();
+        }
+        this.activeStream = null;
     };
 
     BeauBot.prototype.formatMessage = function(text) {
@@ -392,7 +447,7 @@
             cards[i].disabled = true;
         }
 
-        this.addMessage('assistant', 'Parfait ! Je vais adapter mes réponses à votre profil **' + this.escapeHtml(this.userProfile.label) + '**. Comment puis-je vous aider ?');
+        this.addMessage('assistant', 'Parfait ! Je vais adapter mes réponses à votre profil **' + this.escapeHtml(this.userProfile.label) + '**. Comment puis-je vous aider ?', null, null, null, { stream: true });
     };
 
     BeauBot.prototype.showSuggestions = function() {
@@ -438,6 +493,7 @@
     };
 
     BeauBot.prototype.handleNewConversation = function() {
+        this.finishActiveStream();
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
         }
@@ -449,6 +505,7 @@
 
     BeauBot.prototype.handleConversationLoaded = function(detail) {
         var conversation = detail.conversation;
+        this.finishActiveStream();
         
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
