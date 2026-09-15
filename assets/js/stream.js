@@ -1,33 +1,34 @@
 /**
- * BeauBot Stream - Affichage progressif des réponses à vitesse de lecture.
+ * BeauBot Stream - Affichage progressif style ChatGPT.
  *
- * Révèle le HTML mot à mot à ~220 mots/minute (lecture silencieuse moyenne).
- * Un clic sur le message affiche le reste immédiatement.
+ * Le markdown est révélé mot à mot : le bloc grandit au fur et à mesure,
+ * sans réserver d'espace vide à l'avance.
  *
- * Expose : window.BeauBotStream = { play, WORDS_PER_MINUTE }
+ * Expose : window.BeauBotStream = { play }
  */
 (function () {
     'use strict';
 
-    /** Lecture silencieuse moyenne (français / textes informatifs). */
-    const WORDS_PER_MINUTE = 220;
+    /** Délai entre deux mots (ms) — rythme proche de ChatGPT, pas de la lecture. */
+    const TICK_MS = 32;
 
     /**
-     * Streamer du HTML dans un conteneur.
+     * Streamer du markdown dans un conteneur.
      * @param {HTMLElement} container
-     * @param {string} html
+     * @param {string} text - Markdown source (pas le HTML final).
      * @param {object} [options]
-     * @param {number} [options.wpm]
+     * @param {function(string): string} [options.format] - Convertit un préfixe markdown en HTML.
      * @param {function} [options.onTick]
      * @param {function} [options.onDone]
      * @returns {{ finish: function, cancel: function }}
      */
-    function play(container, html, options) {
+    function play(container, text, options) {
         const opts = options || {};
-        const wpm = opts.wpm > 0 ? opts.wpm : WORDS_PER_MINUTE;
-        const baseDelay = Math.max(50, Math.round(60000 / wpm));
-        let doneCalled = false;
+        const format = typeof opts.format === 'function'
+            ? opts.format
+            : function (chunk) { return chunk; };
 
+        let doneCalled = false;
         const finishNow = function () {
             if (doneCalled) {
                 return;
@@ -43,53 +44,28 @@
             return { finish: finishNow, cancel: finishNow };
         }
 
-        if (shouldSkipAnimation()) {
-            container.innerHTML = html;
+        const source = text == null ? '' : String(text);
+        const tokens = tokenize(source);
+
+        const render = function (partial, withCaret) {
+            const html = format(stripTrailingBreaks(partial));
+            container.innerHTML = html + (withCaret ? '<span class="beaubot-stream-caret" aria-hidden="true"></span>' : '');
+        };
+
+        if (shouldSkipAnimation() || tokens.length === 0) {
+            render(source, false);
             finishNow();
             return { finish: finishNow, cancel: finishNow };
         }
 
-        const staging = document.createElement('div');
-        staging.innerHTML = html;
-
-        const jobs = collectTextJobs(staging);
         container.innerHTML = '';
-        while (staging.firstChild) {
-            container.appendChild(staging.firstChild);
-        }
-
-        if (jobs.length === 0) {
-            finishNow();
-            return { finish: finishNow, cancel: finishNow };
-        }
-
-        const caret = document.createElement('span');
-        caret.className = 'beaubot-stream-caret';
-        caret.setAttribute('aria-hidden', 'true');
-
         container.classList.add('beaubot-is-streaming');
         container.setAttribute('aria-busy', 'true');
 
         let timer = null;
-        let jobIndex = 0;
-        let wordIndex = 0;
+        let index = 0;
+        let buffer = '';
         let stopped = false;
-
-        const placeCaret = function (node) {
-            if (!caret.parentNode) {
-                container.appendChild(caret);
-            }
-            const parent = node.parentNode;
-            if (parent) {
-                parent.insertBefore(caret, node.nextSibling);
-            }
-        };
-
-        const revealAll = function () {
-            jobs.forEach(function (job) {
-                job.node.textContent = job.full;
-            });
-        };
 
         const complete = function () {
             if (stopped) {
@@ -100,10 +76,7 @@
                 clearTimeout(timer);
                 timer = null;
             }
-            revealAll();
-            if (caret.parentNode) {
-                caret.parentNode.removeChild(caret);
-            }
+            render(source, false);
             container.classList.remove('beaubot-is-streaming');
             container.removeAttribute('aria-busy');
             container.removeEventListener('click', onSkip);
@@ -122,43 +95,63 @@
                 return;
             }
 
-            while (jobIndex < jobs.length && jobs[jobIndex].immediate) {
-                jobs[jobIndex].node.textContent = jobs[jobIndex].full;
-                placeCaret(jobs[jobIndex].node);
-                jobIndex += 1;
-                wordIndex = 0;
-            }
-
-            if (jobIndex >= jobs.length) {
-                complete();
-                return;
-            }
-
-            const job = jobs[jobIndex];
-            wordIndex += 1;
-            job.node.textContent = job.words.slice(0, wordIndex).join(' ');
-            placeCaret(job.node);
+            buffer += tokens[index];
+            index += 1;
+            render(buffer, true);
 
             if (typeof opts.onTick === 'function') {
                 opts.onTick();
             }
 
-            if (wordIndex >= job.words.length) {
-                jobIndex += 1;
-                wordIndex = 0;
+            if (index >= tokens.length) {
+                complete();
+                return;
             }
 
-            const lastWord = job.words[Math.max(0, wordIndex - 1)] || '';
-            timer = setTimeout(tick, delayForWord(lastWord, baseDelay));
+            timer = setTimeout(tick, delayForToken(tokens[index - 1]));
         };
 
         container.addEventListener('click', onSkip);
-        timer = setTimeout(tick, 40);
+        timer = setTimeout(tick, 16);
 
         return {
             finish: complete,
             cancel: complete,
         };
+    }
+
+    /**
+     * Couper le markdown en mots, en conservant espaces et retours à la ligne.
+     * @param {string} text
+     * @returns {string[]}
+     */
+    function tokenize(text) {
+        const tokens = text.match(/\S+\s*/g);
+        return tokens && tokens.length ? tokens : (text ? [text] : []);
+    }
+
+    /**
+     * Éviter qu'un \n\n final ouvre un paragraphe vide avant le mot suivant.
+     * @param {string} text
+     * @returns {string}
+     */
+    function stripTrailingBreaks(text) {
+        return text.replace(/[\n\r]+$/g, '');
+    }
+
+    /**
+     * @param {string} token
+     * @returns {number}
+     */
+    function delayForToken(token) {
+        const word = token.trim();
+        if (/[.!?…]$/.test(word)) {
+            return TICK_MS + 40;
+        }
+        if (/[,;:]$/.test(word)) {
+            return TICK_MS + 16;
+        }
+        return TICK_MS;
     }
 
     /**
@@ -168,55 +161,7 @@
         return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     }
 
-    /**
-     * Collecter les nœuds texte à révéler.
-     * @param {HTMLElement} root
-     * @returns {Array<{node: Text, full: string, words: string[], immediate: boolean}>}
-     */
-    function collectTextJobs(root) {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-        const jobs = [];
-        let node;
-
-        while ((node = walker.nextNode())) {
-            const full = node.textContent;
-            if (!full || !full.trim()) {
-                continue;
-            }
-
-            const immediate = !!(node.parentElement && node.parentElement.closest('pre, code'));
-            const words = immediate ? [full] : full.trim().split(/\s+/).filter(Boolean);
-
-            node.textContent = '';
-            jobs.push({
-                node: node,
-                full: full,
-                words: words,
-                immediate: immediate,
-            });
-        }
-
-        return jobs;
-    }
-
-    /**
-     * Pause un peu plus longue après la ponctuation, comme à la lecture.
-     * @param {string} word
-     * @param {number} baseDelay
-     * @returns {number}
-     */
-    function delayForWord(word, baseDelay) {
-        if (/[.!?…]$/.test(word)) {
-            return Math.round(baseDelay * 2.1);
-        }
-        if (/[,;:]$/.test(word)) {
-            return Math.round(baseDelay * 1.35);
-        }
-        return baseDelay;
-    }
-
     window.BeauBotStream = {
         play: play,
-        WORDS_PER_MINUTE: WORDS_PER_MINUTE,
     };
 })();

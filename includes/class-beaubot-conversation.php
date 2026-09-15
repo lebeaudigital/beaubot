@@ -201,6 +201,7 @@ class BeauBot_Conversation {
      * @param int|null $tokens_input
      * @param int|null $tokens_output
      * @param string|null $model
+     * @param array|null  $sources Sources structurées (réponses assistant).
      * @return int|false
      */
     public function add_message(
@@ -211,7 +212,8 @@ class BeauBot_Conversation {
         ?string $image_url = null,
         ?int $tokens_input = null,
         ?int $tokens_output = null,
-        ?string $model = null
+        ?string $model = null,
+        ?array $sources = null
     ): int|false {
         global $wpdb;
 
@@ -227,6 +229,11 @@ class BeauBot_Conversation {
             'created_at' => current_time('mysql'),
         ];
         $formats = ['%d', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s'];
+
+        if ($sources !== null) {
+            $data['sources'] = wp_json_encode($sources, JSON_UNESCAPED_UNICODE);
+            $formats[] = '%s';
+        }
 
         $result = $wpdb->insert($this->table_messages, $data, $formats);
 
@@ -302,7 +309,23 @@ class BeauBot_Conversation {
             ARRAY_A
         );
 
-        return $results ?: [];
+        return array_map([$this, 'normalize_message_row'], $results ?: []);
+    }
+
+    /**
+     * Décoder le JSON des sources d'un message.
+     *
+     * @param array $row
+     * @return array
+     */
+    private function normalize_message_row(array $row): array {
+        if (!empty($row['sources'])) {
+            $decoded = json_decode($row['sources'], true);
+            $row['sources'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $row['sources'] = [];
+        }
+        return $row;
     }
 
     /**
@@ -447,7 +470,7 @@ class BeauBot_Conversation {
             ARRAY_A
         );
 
-        return $results ?: [];
+        return array_map([$this, 'normalize_message_row'], $results ?: []);
     }
 
     /**

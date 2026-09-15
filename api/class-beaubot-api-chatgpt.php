@@ -123,6 +123,7 @@ class BeauBot_API_ChatGPT {
             $prompt .= "- Ajoute des explications complémentaires, des nuances et des cas particuliers.\n";
             $prompt .= "- Cite les sources et pages de référence dans ta réponse.\n";
             $prompt .= "- Quand tu renvoies vers une page, utilise un lien Markdown [titre](URL) avec l'URL exacte fournie dans le contenu, sans la modifier.\n";
+            $prompt .= "- Après chaque idée ou lien appuyé sur une source numérotée, ajoute [1], [2]... (un même numéro peut revenir plusieurs fois).\n";
             $prompt .= "- Réponds en français.\n";
             $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
             $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";
@@ -134,6 +135,7 @@ class BeauBot_API_ChatGPT {
             $prompt .= "- Un seul paragraphe d'explication + la source à la fin.\n";
             $prompt .= "- Si l'utilisateur veut plus de détails, il demandera — ne donne pas tout d'un coup.\n";
             $prompt .= "- Termine par la page source pour approfondir, sous forme de lien Markdown [titre](URL) avec l'URL exacte fournie dans le contenu.\n";
+            $prompt .= "- Après chaque idée ou lien appuyé sur une source numérotée, ajoute [1], [2]... (un même numéro peut revenir plusieurs fois).\n";
             $prompt .= "- Réponds en français.\n";
             $prompt .= "- Base-toi UNIQUEMENT sur le contenu du site ci-dessous.\n";
             $prompt .= "- Si le terme n'existe pas dans le contenu, dis-le et propose des sujets proches.\n";

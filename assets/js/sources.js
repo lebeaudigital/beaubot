@@ -55,8 +55,6 @@
         const chip = document.createElement('a');
         chip.className = 'beaubot-source-chip';
         chip.href = source.url;
-        chip.target = '_blank';
-        chip.rel = 'noopener noreferrer';
 
         if (source.is_external) {
             chip.classList.add('beaubot-source-chip-external');

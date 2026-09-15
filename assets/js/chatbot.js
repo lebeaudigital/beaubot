@@ -234,14 +234,7 @@
 
         var contentContainer = messageEl.querySelector('.beaubot-message-content');
         var textEl = messageEl.querySelector('.beaubot-message-text');
-        var formatted = content ? this.formatMessage(content) : '';
-
-        if (role === 'assistant' && formatted && sources && window.BeauBotSources && typeof window.BeauBotSources.decorateAnchors === 'function') {
-            var linkHost = document.createElement('div');
-            linkHost.innerHTML = formatted;
-            window.BeauBotSources.decorateAnchors(linkHost, sources);
-            formatted = linkHost.innerHTML;
-        }
+        var rawText = content || '';
 
         // Injecter le bloc des sources (chips numérotés) sous le contenu de la réponse IA
         if (role === 'assistant' && sources && window.BeauBotSources && typeof window.BeauBotSources.render === 'function') {
@@ -256,7 +249,7 @@
 
         var shouldStream = role === 'assistant'
             && options.stream
-            && formatted
+            && rawText
             && window.BeauBotStream
             && typeof window.BeauBotStream.play === 'function';
 
@@ -272,9 +265,14 @@
             self.scrollToBottom();
         };
 
+        var formatPartial = function(partial) {
+            return self.formatMessage(partial, sources);
+        };
+
         if (shouldStream && textEl) {
             textEl.setAttribute('title', 'Cliquer pour afficher toute la réponse');
-            this.activeStream = window.BeauBotStream.play(textEl, formatted, {
+            this.activeStream = window.BeauBotStream.play(textEl, rawText, {
+                format: formatPartial,
                 onTick: function() {
                     self.scrollToBottom();
                 },
@@ -282,7 +280,7 @@
             });
         } else {
             if (textEl) {
-                textEl.innerHTML = formatted;
+                textEl.innerHTML = formatPartial(rawText);
             }
             revealMeta();
         }
@@ -297,7 +295,7 @@
         this.activeStream = null;
     };
 
-    BeauBot.prototype.formatMessage = function(text) {
+    BeauBot.prototype.formatMessage = function(text, sources) {
         text = this.escapeHtml(text);
 
         // Code blocks (protect content inside from further processing)
@@ -318,8 +316,22 @@
         text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
         text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-        // Links
-        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+        // Links (même onglet)
+        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+        // Citations [1] [2] [3] → pastilles cliquables (après les liens Markdown)
+        if (sources && sources.length) {
+            var selfFormat = this;
+            text = text.replace(/\[(\d+)\]/g, function(match, rank) {
+                var source = selfFormat.findSourceByRank(sources, rank);
+                if (!source || !source.url) {
+                    return match;
+                }
+                var href = selfFormat.escapeHtml(source.url);
+                var title = selfFormat.escapeHtml(source.title || '');
+                return '<a class="beaubot-cite" href="' + href + '" title="' + title + '">' + rank + '</a>';
+            });
+        }
 
         // Horizontal rules
         text = text.replace(/^---$/gm, '<hr>');
@@ -341,6 +353,19 @@
         }
 
         return text;
+    };
+
+    BeauBot.prototype.findSourceByRank = function(sources, rank) {
+        if (!sources || !sources.length) {
+            return null;
+        }
+        var needle = String(rank);
+        for (var i = 0; i < sources.length; i++) {
+            if (String(sources[i].rank) === needle) {
+                return sources[i];
+            }
+        }
+        return null;
     };
 
     BeauBot.prototype.formatLists = function(text) {
@@ -523,7 +548,7 @@
                         completion_tokens: msg.tokens_output,
                     };
                 }
-                this.addMessage(msg.role, msg.content, msg.image_url, msgUsage);
+                this.addMessage(msg.role, msg.content, msg.image_url, msgUsage, msg.sources || null);
             }
         }
     };

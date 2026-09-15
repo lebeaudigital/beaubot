@@ -441,6 +441,16 @@ class BeauBot_API_Endpoints {
             error_log("[BeauBot] After refresh: " . (empty($site_context) ? "STILL EMPTY!" : strlen($site_context) . " chars"));
         }
 
+        // Sources disponibles dès le RAG (pour numéroter les citations dans le prompt)
+        $sources = $wp_api->get_last_sources($message, 3);
+        if (!empty($sources)) {
+            if (!class_exists('BeauBot_API_Sources')) {
+                require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-sources.php';
+            }
+            $sources_api = new BeauBot_API_Sources();
+            $site_context .= $sources_api->format_citation_guide($sources);
+        }
+
         // Envoyer à ChatGPT avec le niveau de profil
         $response = $chatgpt->send_message($messages, $image_base64, $site_context, $user_profile_level);
 
@@ -453,18 +463,16 @@ class BeauBot_API_Endpoints {
         $tokens_input = $usage['prompt_tokens'] ?? null;
         $tokens_output = $usage['completion_tokens'] ?? null;
 
-        // Sources + liens ancrés vers le paragraphe cité (avant enregistrement)
-        $sources = $wp_api->get_last_sources($message, 3);
         $assistant_content = $response['content'];
         if (!empty($sources)) {
             if (!class_exists('BeauBot_API_Sources')) {
                 require_once BEAUBOT_PLUGIN_DIR . 'api/class-beaubot-api-sources.php';
             }
             $sources_api = new BeauBot_API_Sources();
-            $assistant_content = $sources_api->enrich_message_links($assistant_content, $sources);
+            $assistant_content = $sources_api->inject_citations($assistant_content, $sources);
         }
 
-        // Enregistrer la réponse de l'assistant avec les tokens et le modèle
+        // Enregistrer la réponse (contenu cité + sources JSON pour la réouverture)
         $conversation_handler->add_message(
             $conversation_id, 
             $user_id, 
@@ -473,7 +481,8 @@ class BeauBot_API_Endpoints {
             null,
             $tokens_input ? (int) $tokens_input : null,
             $tokens_output ? (int) $tokens_output : null,
-            $response['model'] ?? null
+            $response['model'] ?? null,
+            $sources ?: null
         );
 
         // Décompter le quota uniquement si activé (réponse OK)

@@ -607,6 +607,33 @@
     font-weight: 700;
 }
 
+.beaubot-cite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15em;
+    height: 1.15em;
+    padding: 0 4px;
+    margin: 0 1px 0 3px;
+    border-radius: 999px;
+    background: var(--beaubot-primary);
+    color: #ffffff !important;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none !important;
+    vertical-align: 0.25em;
+    position: relative;
+    top: -0.1em;
+}
+
+.beaubot-cite:hover,
+.beaubot-cite:focus-visible {
+    background: var(--beaubot-primary-dark);
+    color: #ffffff !important;
+    outline: none;
+}
+
 .beaubot-source-chip-title {
     flex: 1 1 auto;
     overflow: hidden;

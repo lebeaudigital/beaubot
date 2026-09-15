@@ -425,6 +425,126 @@ class BeauBot_API_Sources {
     }
 
     /**
+     * Injecter les numéros de citation [1], [2]... à chaque mention d'une source.
+     * Un même numéro peut apparaître plusieurs fois.
+     *
+     * @param string $content
+     * @param array  $sources
+     * @return string
+     */
+    public function inject_citations(string $content, array $sources): string {
+        if ($content === '' || empty($sources)) {
+            return $content;
+        }
+
+        $content = $this->enrich_message_links($content, $sources);
+
+        $blocks = [];
+        $content = preg_replace_callback('/```[\s\S]*?```|`[^`]+`/', function (array $m) use (&$blocks) {
+            $blocks[] = $m[0];
+            return "\x00BLK" . (count($blocks) - 1) . "\x00";
+        }, $content) ?? $content;
+
+        $content = preg_replace_callback(
+            '/\[([^\]]+)\]\(([^)]+)\)(\s*\[\d+\])?/',
+            function (array $m) use ($sources) {
+                if (!empty($m[3])) {
+                    return $m[0];
+                }
+                $rank = $this->match_source_rank($m[2], $m[1], $sources);
+                if ($rank === null) {
+                    return $m[0];
+                }
+                return '[' . $m[1] . '](' . $m[2] . ') [' . $rank . ']';
+            },
+            $content
+        ) ?? $content;
+
+        foreach ($sources as $source) {
+            $title = trim((string) ($source['title'] ?? ''));
+            $rank = (int) ($source['rank'] ?? 0);
+            if ($rank < 1 || mb_strlen($title) < 6 || strcasecmp($title, 'Page sans titre') === 0) {
+                continue;
+            }
+
+            $quoted = preg_quote($title, '/');
+            $content = preg_replace(
+                '/' . $quoted . '(?!\s*\[\d+\])(?!\])/iu',
+                '$0 [' . $rank . ']',
+                $content
+            ) ?? $content;
+        }
+
+        foreach ($blocks as $i => $block) {
+            $content = str_replace("\x00BLK{$i}\x00", $block, $content);
+        }
+
+        return $content;
+    }
+
+    /**
+     * Guide à injecter dans le contexte pour que le modèle numérote ses citations.
+     *
+     * @param array $sources
+     * @return string
+     */
+    public function format_citation_guide(array $sources): string {
+        if (empty($sources)) {
+            return '';
+        }
+
+        $out = "\n\n---SOURCES NUMÉROTÉES---\n";
+        $out .= "Ajoute le numéro ([1], [2]...) juste après chaque idée, phrase ou lien qui s'appuie sur cette page. Un même numéro peut être répété plusieurs fois.\n";
+
+        foreach ($sources as $source) {
+            $rank = (int) ($source['rank'] ?? 0);
+            $title = (string) ($source['title'] ?? '');
+            $url = (string) ($source['page_url'] ?? '');
+            $out .= "[{$rank}] {$title} — {$url}\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param string $href
+     * @param string $label
+     * @param array  $sources
+     * @return int|null
+     */
+    private function match_source_rank(string $href, string $label, array $sources): ?int {
+        foreach ($sources as $source) {
+            $page_url = $source['page_url'] ?? '';
+            $anchored = $source['url'] ?? '';
+            $rank = (int) ($source['rank'] ?? 0);
+            if ($rank < 1) {
+                continue;
+            }
+            if ($page_url !== '' && $this->urls_match($href, $page_url)) {
+                return $rank;
+            }
+            if ($anchored !== '' && $this->urls_match($href, $anchored)) {
+                return $rank;
+            }
+        }
+
+        $label_norm = mb_strtolower(trim($label), 'UTF-8');
+        if ($label_norm === '') {
+            return null;
+        }
+
+        foreach ($sources as $source) {
+            $title = mb_strtolower(trim((string) ($source['title'] ?? '')), 'UTF-8');
+            $rank = (int) ($source['rank'] ?? 0);
+            if ($title !== '' && $rank > 0 && (str_contains($label_norm, $title) || str_contains($title, $label_norm))) {
+                return $rank;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Trouver l'URL ancrée correspondant à un lien (URL ou titre de page).
      *
      * @param string $href
