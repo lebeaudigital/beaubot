@@ -40,7 +40,7 @@ class BeauBot_API_ChatGPT {
     public function __construct() {
         $this->options = get_option('beaubot_settings', []);
         $this->api_key = $this->options['api_key'] ?? '';
-        $this->model = $this->options['model'] ?? 'gpt-4o-mini';
+        $this->model = $this->options['model'] ?? 'gpt-6-luna';
     }
 
     /**
@@ -75,13 +75,7 @@ class BeauBot_API_ChatGPT {
         // Préparer les messages pour l'API
         $api_messages = $this->prepare_messages($messages, $system_prompt, $image_base64);
 
-        // Appel API
-        $response = $this->make_request('/chat/completions', [
-            'model' => $this->model,
-            'messages' => $api_messages,
-            'max_tokens' => (int) ($this->options['max_tokens'] ?? 2000),
-            'temperature' => (float) ($this->options['temperature'] ?? 0.7),
-        ]);
+        $response = $this->make_request('/chat/completions', $this->build_completion_payload($api_messages));
 
         if (is_wp_error($response)) {
             return $response;
@@ -97,6 +91,57 @@ class BeauBot_API_ChatGPT {
             'usage' => $response['usage'] ?? null,
             'model' => $response['model'] ?? $this->model,
         ];
+    }
+
+    /**
+     * Construire le corps de la requête chat/completions selon le modèle.
+     * GPT-6 Luna (et autres GPT-6) exigent reasoning_effort ; temperature
+     * n'est autorisé que si l'effort est "none".
+     *
+     * @param array $api_messages
+     * @return array
+     */
+    private function build_completion_payload(array $api_messages): array {
+        $payload = [
+            'model' => $this->model,
+            'messages' => $api_messages,
+        ];
+
+        $max_tokens = (int) ($this->options['max_tokens'] ?? 2000);
+
+        if ($this->is_reasoning_model()) {
+            $effort = $this->get_reasoning_effort();
+            $payload['reasoning_effort'] = $effort;
+            $payload['max_completion_tokens'] = $max_tokens;
+
+            if ($effort === 'none') {
+                $payload['temperature'] = (float) ($this->options['temperature'] ?? 0.7);
+            }
+
+            return $payload;
+        }
+
+        $payload['max_tokens'] = $max_tokens;
+        $payload['temperature'] = (float) ($this->options['temperature'] ?? 0.7);
+
+        return $payload;
+    }
+
+    /**
+     * Les GPT-6 (Luna, Sol, Astra, Terra) sont des modèles de raisonnement.
+     */
+    private function is_reasoning_model(): bool {
+        return str_starts_with($this->model, 'gpt-6');
+    }
+
+    /**
+     * Effort de raisonnement : none, low, medium, high, xhigh, max.
+     */
+    private function get_reasoning_effort(): string {
+        $allowed = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+        $effort = $this->options['reasoning_effort'] ?? 'low';
+
+        return in_array($effort, $allowed, true) ? $effort : 'low';
     }
 
     /**

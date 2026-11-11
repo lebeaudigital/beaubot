@@ -22,6 +22,7 @@
     var labels = Object.keys(allDays).sort();
 
     var palette = {
+        'gpt-6-luna':  { border: '#0ea5e9', bg: 'rgba(14, 165, 233, 0.1)' },
         'gpt-4o':      { border: '#6366f1', bg: 'rgba(99, 102, 241, 0.1)' },
         'gpt-4o-mini': { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
         'unknown':     { border: '#94a3b8', bg: 'rgba(148, 163, 184, 0.1)' },

@@ -61,10 +61,11 @@ if (!defined('ABSPATH')) {
                     </th>
                     <td>
                         <?php 
-                        $model = $options['model'] ?? 'gpt-4o';
+                        $model = $options['model'] ?? 'gpt-6-luna';
                         $models = [
-                            'gpt-4o' => 'GPT-4o (Recommandé - Vision)',
-                            'gpt-4o-mini' => 'GPT-4o Mini (Économique - Vision)',
+                            'gpt-6-luna' => 'GPT-6 Luna (défaut — économique, vision)',
+                            'gpt-4o' => 'GPT-4o (Vision)',
+                            'gpt-4o-mini' => 'GPT-4o Mini (Vision)',
                             'gpt-4-turbo' => 'GPT-4 Turbo (Vision)',
                             'gpt-3.5-turbo' => 'GPT-3.5 Turbo (Pas de vision)',
                         ];
@@ -77,7 +78,35 @@ if (!defined('ABSPATH')) {
                             <?php endforeach; ?>
                         </select>
                         <p class="description">
-                            <?php esc_html_e('GPT-4o est recommandé pour l\'analyse d\'images.', 'beaubot'); ?>
+                            <?php esc_html_e('GPT-6 Luna est le modèle par défaut. Utilisez l\'effort « low » pour des réponses rapides.', 'beaubot'); ?>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="beaubot_reasoning_effort"><?php esc_html_e('Effort de raisonnement', 'beaubot'); ?></label>
+                    </th>
+                    <td>
+                        <?php
+                        $effort = $options['reasoning_effort'] ?? 'low';
+                        $efforts = [
+                            'none' => 'None',
+                            'low' => 'Low (défaut)',
+                            'medium' => 'Medium',
+                            'high' => 'High',
+                            'xhigh' => 'XHigh',
+                            'max' => 'Max',
+                        ];
+                        ?>
+                        <select id="beaubot_reasoning_effort" name="beaubot_settings[reasoning_effort]">
+                            <?php foreach ($efforts as $effort_id => $effort_name): ?>
+                                <option value="<?php echo esc_attr($effort_id); ?>" <?php selected($effort, $effort_id); ?>>
+                                    <?php echo esc_html($effort_name); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="description">
+                            <?php esc_html_e('Utilisé avec GPT-6 Luna. Low = plus rapide. Medium et plus = plus réfléchi (et plus lent / coûteux).', 'beaubot'); ?>
                         </p>
                     </td>
                 </tr>

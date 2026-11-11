@@ -320,7 +320,8 @@ class BeauBot_Admin {
     private function get_default_settings(): array {
         return [
             'api_key' => '',
-            'model' => 'gpt-4o-mini',
+            'model' => 'gpt-6-luna',
+            'reasoning_effort' => 'low',
             'bot_name' => 'BeauBot',
             'primary_color' => '#6366f1',
             'sidebar_position' => 'right',
@@ -341,7 +342,11 @@ class BeauBot_Admin {
         
         // API
         $sanitized['api_key'] = sanitize_text_field($input['api_key'] ?? '');
-        $sanitized['model'] = sanitize_text_field($input['model'] ?? 'gpt-4o-mini');
+        $sanitized['model'] = sanitize_text_field($input['model'] ?? 'gpt-6-luna');
+        $effort = sanitize_text_field($input['reasoning_effort'] ?? 'low');
+        $sanitized['reasoning_effort'] = in_array($effort, ['none', 'low', 'medium', 'high', 'xhigh', 'max'], true)
+            ? $effort
+            : 'low';
         
         // Interface
         $sanitized['bot_name'] = sanitize_text_field($input['bot_name'] ?? 'BeauBot');
@@ -551,10 +556,11 @@ class BeauBot_Admin {
 
     public function render_model_field(): void {
         $options = get_option(self::OPTION_NAME);
-        $value = $options['model'] ?? 'gpt-4o';
+        $value = $options['model'] ?? 'gpt-6-luna';
         $models = [
-            'gpt-4o' => 'GPT-4o (Recommandé)',
-            'gpt-4o-mini' => 'GPT-4o Mini (Économique)',
+            'gpt-6-luna' => 'GPT-6 Luna (défaut)',
+            'gpt-4o' => 'GPT-4o',
+            'gpt-4o-mini' => 'GPT-4o Mini',
             'gpt-4-turbo' => 'GPT-4 Turbo',
             'gpt-3.5-turbo' => 'GPT-3.5 Turbo',
         ];
@@ -567,7 +573,7 @@ class BeauBot_Admin {
             <?php endforeach; ?>
         </select>
         <p class="description">
-            <?php esc_html_e('GPT-4o est recommandé pour l\'analyse d\'images.', 'beaubot'); ?>
+            <?php esc_html_e('GPT-6 Luna (effort low) est le modèle par défaut.', 'beaubot'); ?>
         </p>
         <?php
     }

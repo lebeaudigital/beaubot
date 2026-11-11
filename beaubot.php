@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.7.6
+ * Version: 1.7.7
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.7.6');
+define('BEAUBOT_VERSION', '1.7.7');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -187,7 +187,32 @@ class BeauBot {
         $db_version = get_option('beaubot_db_version', '0');
         if (version_compare($db_version, BEAUBOT_VERSION, '<')) {
             $this->create_tables();
+            $this->migrate_default_model();
             update_option('beaubot_db_version', BEAUBOT_VERSION);
+        }
+    }
+
+    /**
+     * Passer l'ancien défaut GPT-4o Mini vers GPT-6 Luna (effort low).
+     */
+    private function migrate_default_model(): void {
+        $existing = get_option('beaubot_settings');
+        if (!is_array($existing)) {
+            return;
+        }
+
+        $changed = false;
+        if (($existing['model'] ?? '') === 'gpt-4o-mini') {
+            $existing['model'] = 'gpt-6-luna';
+            $changed = true;
+        }
+        if (empty($existing['reasoning_effort'])) {
+            $existing['reasoning_effort'] = 'low';
+            $changed = true;
+        }
+
+        if ($changed) {
+            update_option('beaubot_settings', $existing);
         }
     }
 
@@ -215,7 +240,8 @@ class BeauBot {
         // Options par défaut
         $default_options = [
             'api_key' => '',
-            'model' => 'gpt-4o-mini',
+            'model' => 'gpt-6-luna',
+            'reasoning_effort' => 'low',
             'sidebar_position' => 'right',
             'max_tokens' => 2000,
             'temperature' => 0.7,
@@ -225,10 +251,22 @@ class BeauBot {
         if (!get_option('beaubot_settings')) {
             add_option('beaubot_settings', $default_options);
         } else {
-            // Migration : mettre à jour max_tokens si encore à l'ancienne valeur par défaut
             $existing = get_option('beaubot_settings');
+            $changed = false;
             if (isset($existing['max_tokens']) && (int) $existing['max_tokens'] === 1000) {
                 $existing['max_tokens'] = 2000;
+                $changed = true;
+            }
+            if (($existing['model'] ?? '') === 'gpt-4o-mini') {
+                $existing['model'] = 'gpt-6-luna';
+                $existing['reasoning_effort'] = 'low';
+                $changed = true;
+            }
+            if (empty($existing['reasoning_effort'])) {
+                $existing['reasoning_effort'] = 'low';
+                $changed = true;
+            }
+            if ($changed) {
                 update_option('beaubot_settings', $existing);
             }
         }

@@ -12,6 +12,7 @@ $table = $wpdb->prefix . 'beaubot_messages';
 
 // Grille tarifaire ($ par 1M tokens)
 $pricing = [
+    'gpt-6-luna' => ['input' => 0.10, 'output' => 0.50],
     'gpt-4o-mini' => ['input' => 0.15, 'output' => 0.60],
     'gpt-4o' => ['input' => 2.50, 'output' => 10.00],
 ];
@@ -70,7 +71,7 @@ $total_tokens_month = 0;
 
 foreach ($month_stats as $row) {
     $model_key = beaubot_resolve_model($row['model'], $pricing);
-    $rates = $pricing[$model_key] ?? $pricing['gpt-4o-mini'];
+    $rates = $pricing[$model_key] ?? $pricing['gpt-6-luna'];
     $cost = ($row['total_input'] / 1_000_000) * $rates['input']
           + ($row['total_output'] / 1_000_000) * $rates['output'];
 
@@ -87,7 +88,7 @@ $avg_cost_per_request = $total_requests_month > 0
 $chart_data = [];
 foreach ($daily_stats as $row) {
     $model_key = beaubot_resolve_model($row['model'], $pricing);
-    $rates = $pricing[$model_key] ?? $pricing['gpt-4o-mini'];
+    $rates = $pricing[$model_key] ?? $pricing['gpt-6-luna'];
     $cost = ($row['total_input'] / 1_000_000) * $rates['input']
           + ($row['total_output'] / 1_000_000) * $rates['output'];
 
