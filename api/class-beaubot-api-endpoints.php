@@ -62,6 +62,13 @@ class BeauBot_API_Endpoints {
                     'required' => false,
                     'type' => 'string',
                 ],
+                'images' => [
+                    'required' => false,
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'string',
+                    ],
+                ],
                 'user_profile_level' => [
                     'required' => false,
                     'type' => 'string',
@@ -332,12 +339,12 @@ class BeauBot_API_Endpoints {
         $user_id = get_current_user_id();
         $message = $request->get_param('message');
         $conversation_id = $request->get_param('conversation_id');
-        $image_data = $request->get_param('image');
+        $images = $this->collect_chat_images($request);
         $user_profile_level = $request->get_param('user_profile_level');
 
         // Vérification du quota AVANT tout traitement coûteux
         $quota = BeauBot_Quota::get_instance();
-        $has_image = !empty($image_data);
+        $has_image = !empty($images);
         $cost = $quota->calculate_cost($has_image);
         $quota_settings = BeauBot_Quota::get_settings();
 
@@ -357,6 +364,18 @@ class BeauBot_API_Endpoints {
                     'status' => 429,
                     'quota'  => $status,
                 ]
+            );
+        }
+
+        if (count($images) > BeauBot_Image::MAX_CHAT_IMAGES) {
+            return new WP_Error(
+                'too_many_images',
+                sprintf(
+                    /* translators: %d is the maximum number of images */
+                    __('Vous pouvez joindre %d images maximum.', 'beaubot'),
+                    BeauBot_Image::MAX_CHAT_IMAGES
+                ),
+                ['status' => 400]
             );
         }
 
@@ -383,46 +402,32 @@ class BeauBot_API_Endpoints {
             }
         }
 
-        // Gérer l'image si présente
-        $image_url = null;
-        $image_base64 = null;
-        
-        if ($image_data) {
-            error_log("[BeauBot] Image data received, length: " . strlen($image_data));
-            error_log("[BeauBot] Image data starts with: " . substr($image_data, 0, 50));
-            
-            // Si c'est une URL d'image déjà uploadée
-            if (filter_var($image_data, FILTER_VALIDATE_URL)) {
-                $image_url = $image_data;
-                // Convertir en base64 pour l'API
-                $image_path = str_replace(
-                    wp_upload_dir()['baseurl'], 
-                    wp_upload_dir()['basedir'], 
-                    $image_data
-                );
-                $image_base64 = $image_handler->to_base64($image_path);
-                error_log("[BeauBot] Image URL converted to base64: " . ($image_base64 ? "YES" : "NO"));
-            } 
-            // Si c'est du base64 directement
-            elseif (strpos($image_data, 'data:image') === 0) {
-                error_log("[BeauBot] Processing base64 image directly");
-                $upload_result = $image_handler->upload_base64($image_data, $user_id);
-                if (is_wp_error($upload_result)) {
-                    error_log("[BeauBot] Image upload failed: " . $upload_result->get_error_message());
-                    return $upload_result;
-                }
-                $image_url = $upload_result['url'];
-                $image_base64 = $image_data;
-                error_log("[BeauBot] Image uploaded successfully: " . $image_url);
-            } else {
-                error_log("[BeauBot] Unknown image format!");
+        // Gérer les images si présentes
+        $image_urls = [];
+        $image_base64_list = [];
+
+        foreach ($images as $image_data) {
+            $resolved = $this->resolve_chat_image($image_data, $user_id, $image_handler);
+            if (is_wp_error($resolved)) {
+                return $resolved;
             }
-        } else {
-            error_log("[BeauBot] No image data in request");
+            if (!empty($resolved['url'])) {
+                $image_urls[] = $resolved['url'];
+            }
+            if (!empty($resolved['base64'])) {
+                $image_base64_list[] = $resolved['base64'];
+            }
+        }
+
+        $stored_image = null;
+        if (count($image_urls) === 1) {
+            $stored_image = $image_urls[0];
+        } elseif (count($image_urls) > 1) {
+            $stored_image = wp_json_encode($image_urls);
         }
 
         // Enregistrer le message utilisateur
-        $conversation_handler->add_message($conversation_id, $user_id, 'user', $message, $image_url);
+        $conversation_handler->add_message($conversation_id, $user_id, 'user', $message, $stored_image);
 
         // Obtenir l'historique des messages pour le contexte
         $messages = $conversation_handler->get_messages_for_context($conversation_id, $user_id);
@@ -452,7 +457,12 @@ class BeauBot_API_Endpoints {
         }
 
         // Envoyer à ChatGPT avec le niveau de profil
-        $response = $chatgpt->send_message($messages, $image_base64, $site_context, $user_profile_level);
+        $response = $chatgpt->send_message(
+            $messages,
+            $image_base64_list ?: null,
+            $site_context,
+            $user_profile_level
+        );
 
         if (is_wp_error($response)) {
             return $response;
@@ -684,6 +694,73 @@ class BeauBot_API_Endpoints {
             'success' => true,
             'messages' => $messages,
         ], 200);
+    }
+
+    /**
+     * Récupérer les images jointes à un message (tableau ou image unique).
+     * @param WP_REST_Request $request
+     * @return string[]
+     */
+    private function collect_chat_images(WP_REST_Request $request): array {
+        $images = $request->get_param('images');
+        $list = [];
+
+        if (is_array($images)) {
+            foreach ($images as $image) {
+                if (is_string($image) && $image !== '') {
+                    $list[] = $image;
+                }
+            }
+        }
+
+        if (empty($list)) {
+            $single = $request->get_param('image');
+            if (is_string($single) && $single !== '') {
+                $list[] = $single;
+            }
+        }
+
+        return $list;
+    }
+
+    /**
+     * Enregistrer une image de chat et la préparer pour l'API.
+     * @param string $image_data
+     * @param int $user_id
+     * @param BeauBot_Image $image_handler
+     * @return array|WP_Error
+     */
+    private function resolve_chat_image(string $image_data, int $user_id, BeauBot_Image $image_handler): array|WP_Error {
+        if (filter_var($image_data, FILTER_VALIDATE_URL)) {
+            $image_path = str_replace(
+                wp_upload_dir()['baseurl'],
+                wp_upload_dir()['basedir'],
+                $image_data
+            );
+
+            return [
+                'url' => $image_data,
+                'base64' => $image_handler->to_base64($image_path),
+            ];
+        }
+
+        if (strpos($image_data, 'data:image') === 0) {
+            $upload_result = $image_handler->upload_base64($image_data, $user_id);
+            if (is_wp_error($upload_result)) {
+                return $upload_result;
+            }
+
+            return [
+                'url' => $upload_result['url'],
+                'base64' => $image_data,
+            ];
+        }
+
+        return new WP_Error(
+            'invalid_image',
+            __('Format d\'image non reconnu.', 'beaubot'),
+            ['status' => 400]
+        );
     }
 
     /**

@@ -160,7 +160,7 @@ $primary_light = sprintf("#%02x%02x%02x",
                 <button type="button" 
                         id="beaubot-upload-btn" 
                         class="beaubot-input-btn"
-                        title="<?php esc_attr_e('Ajouter une image', 'beaubot'); ?>">
+                        title="<?php esc_attr_e('Ajouter une image ou la coller', 'beaubot'); ?>">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                         <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -186,6 +186,7 @@ $primary_light = sprintf("#%02x%02x%02x",
         <input type="file" 
                id="beaubot-file-input" 
                accept="image/jpeg,image/png,image/gif,image/webp"
+               multiple
                aria-hidden="true">
     </div>
 </div>

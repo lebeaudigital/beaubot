@@ -54,14 +54,14 @@ class BeauBot_API_ChatGPT {
     /**
      * Envoyer un message à ChatGPT
      * @param array $messages Historique des messages
-     * @param string|null $image_base64 Image en base64 (optionnel)
+     * @param array|string|null $image_base64 Image ou images en base64 (optionnel)
      * @param string|null $site_context Contexte du site (optionnel)
      * @param string|null $user_profile_level Niveau de profil utilisateur ('beginner' ou 'expert')
      * @return array|WP_Error
      */
     public function send_message(
         array $messages, 
-        ?string $image_base64 = null, 
+        array|string|null $image_base64 = null, 
         ?string $site_context = null,
         ?string $user_profile_level = null
     ): array|WP_Error {
@@ -213,10 +213,11 @@ class BeauBot_API_ChatGPT {
      * Préparer les messages pour l'API
      * @param array $messages
      * @param string $system_prompt
-     * @param string|null $image_base64
+     * @param array|string|null $image_base64
      * @return array
      */
-    private function prepare_messages(array $messages, string $system_prompt, ?string $image_base64): array {
+    private function prepare_messages(array $messages, string $system_prompt, array|string|null $image_base64): array {
+        $images = $this->normalize_image_list($image_base64);
         $api_messages = [
             [
                 'role' => 'system',
@@ -228,24 +229,27 @@ class BeauBot_API_ChatGPT {
             $role = $message['role'] ?? 'user';
             $content = $message['content'] ?? '';
 
-            // Si c'est le dernier message utilisateur et qu'il y a une image
-            if ($image_base64 && $role === 'user' && $index === count($messages) - 1) {
-                error_log("[BeauBot API] Adding image to message, base64 length: " . strlen($image_base64));
+            if ($images && $role === 'user' && $index === count($messages) - 1) {
+                $parts = [
+                    [
+                        'type' => 'text',
+                        'text' => $content !== '' ? $content : ' ',
+                    ],
+                ];
+
+                foreach ($images as $image) {
+                    $parts[] = [
+                        'type' => 'image_url',
+                        'image_url' => [
+                            'url' => $image,
+                            'detail' => 'low',
+                        ],
+                    ];
+                }
+
                 $api_messages[] = [
                     'role' => 'user',
-                    'content' => [
-                        [
-                            'type' => 'text',
-                            'text' => $content,
-                        ],
-                        [
-                            'type' => 'image_url',
-                            'image_url' => [
-                                'url' => $image_base64,
-                                'detail' => 'low',
-                            ],
-                        ],
-                    ],
+                    'content' => $parts,
                 ];
             } else {
                 $api_messages[] = [
@@ -256,6 +260,30 @@ class BeauBot_API_ChatGPT {
         }
 
         return $api_messages;
+    }
+
+    /**
+     * Normaliser une image unique ou une liste d'images.
+     * @param array|string|null $images
+     * @return string[]
+     */
+    private function normalize_image_list(array|string|null $images): array {
+        if (is_string($images)) {
+            return $images !== '' ? [$images] : [];
+        }
+
+        if (!is_array($images)) {
+            return [];
+        }
+
+        $list = [];
+        foreach ($images as $image) {
+            if (is_string($image) && $image !== '') {
+                $list[] = $image;
+            }
+        }
+
+        return $list;
     }
 
     /**

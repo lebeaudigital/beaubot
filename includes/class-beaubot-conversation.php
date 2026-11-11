@@ -325,7 +325,38 @@ class BeauBot_Conversation {
         } else {
             $row['sources'] = [];
         }
+
+        $image_url = isset($row['image_url']) && is_string($row['image_url']) ? $row['image_url'] : null;
+        $row['image_urls'] = $this->decode_image_urls($image_url);
+
         return $row;
+    }
+
+    /**
+     * Décoder une URL unique ou un JSON de plusieurs URLs.
+     * @param string|null $value
+     * @return string[]
+     */
+    private function decode_image_urls(?string $value): array {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $trimmed = ltrim($value);
+        if ($trimmed !== '' && $trimmed[0] === '[') {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                $urls = [];
+                foreach ($decoded as $url) {
+                    if (is_string($url) && $url !== '') {
+                        $urls[] = $url;
+                    }
+                }
+                return $urls;
+            }
+        }
+
+        return [$value];
     }
 
     /**

@@ -199,6 +199,7 @@ class BeauBot_Frontend {
             'botName' => $bot_name,
             'sidebarPosition' => $this->options['sidebar_position'] ?? 'right',
             'maxFileSize' => wp_max_upload_size(),
+            'maxImages' => BeauBot_Image::MAX_CHAT_IMAGES,
             'allowedMimeTypes' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
             'userProfiles' => $profiles_for_js,
             'suggestions' => $suggestions_for_js,
@@ -206,7 +207,12 @@ class BeauBot_Frontend {
             'strings' => [
                 'placeholder' => __('Posez votre question...', 'beaubot'),
                 'send' => __('Envoyer', 'beaubot'),
-                'uploadImage' => __('Ajouter une image', 'beaubot'),
+                'uploadImage' => __('Ajouter une image ou la coller', 'beaubot'),
+                'tooManyImages' => sprintf(
+                    /* translators: %d is the maximum number of images */
+                    __('Vous pouvez joindre %d images maximum.', 'beaubot'),
+                    BeauBot_Image::MAX_CHAT_IMAGES
+                ),
                 'newConversation' => __('Nouvelle conversation', 'beaubot'),
                 'history' => __('Historique', 'beaubot'),
                 'archive' => __('Archiver', 'beaubot'),

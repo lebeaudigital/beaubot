@@ -10,7 +10,7 @@
     /**
      * Envoyer un message au chatbot et récupérer la réponse complète.
      * @param {object} config - Doit contenir restUrl + nonce.
-     * @param {object} payload - { message, conversation_id?, image?, user_profile_level? }
+     * @param {object} payload - { message, conversation_id?, images?, image?, user_profile_level? }
      * @returns {Promise<object>} Réponse REST : { success, conversation_id, message, sources, usage, quota }
      */
     function sendMessage(config, payload) {

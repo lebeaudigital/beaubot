@@ -508,8 +508,15 @@
 }
 
 /* Image dans le message */
+.beaubot-message-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
 .beaubot-message-image {
-    max-width: 250px;
+    max-width: 220px;
     border-radius: var(--beaubot-radius);
     overflow: hidden;
 }
@@ -1023,7 +1030,9 @@
 }
 
 #beaubot-image-preview.beaubot-has-image {
-    display: block;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .beaubot-image-preview-item {

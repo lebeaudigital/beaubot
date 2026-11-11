@@ -114,15 +114,15 @@
 
     BeauBot.prototype.sendMessage = function(overrideMessage) {
         var message = overrideMessage || (this.inputField ? this.inputField.value.trim() : '');
-        var imageData = (!overrideMessage && this.fileUpload) ? this.fileUpload.getImageData() : null;
+        var images = (!overrideMessage && this.fileUpload) ? this.fileUpload.getImagesData() : [];
 
-        if (!message && !imageData) return;
+        if (!message && !images.length) return;
         if (this.isLoading) return;
 
         this.finishActiveStream();
 
         this.hideSuggestions();
-        this.addMessage('user', message, imageData);
+        this.addMessage('user', message, images);
 
         if (!overrideMessage) {
             this.inputField.value = '';
@@ -130,20 +130,21 @@
             if (this.fileUpload) this.fileUpload.removeImage();
         }
 
-        this.sendToAPI(message, imageData);
+        this.sendToAPI(message, images);
     };
 
     BeauBot.prototype.sendToAPI = function(message, imageData) {
         var self = this;
         this.setLoading(true);
 
+        var images = this.normalizeImages(imageData);
         var payload = {
             message: message,
             conversation_id: this.conversation ? this.conversation.getCurrentId() : null,
         };
 
-        if (imageData) {
-            payload.image = imageData;
+        if (images.length) {
+            payload.images = images;
         }
 
         // Ajouter le profil utilisateur si sélectionné
@@ -208,9 +209,14 @@
             : '<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>';
 
         var contentHtml = '';
-        
-        if (imageData) {
-            contentHtml += '<div class="beaubot-message-image"><img src="' + imageData + '" alt="Image"></div>';
+        var images = this.normalizeImages(imageData);
+
+        if (images.length) {
+            contentHtml += '<div class="beaubot-message-images">';
+            for (var imageIndex = 0; imageIndex < images.length; imageIndex++) {
+                contentHtml += '<div class="beaubot-message-image"><img src="' + this.escapeAttr(images[imageIndex]) + '" alt="Image"></div>';
+            }
+            contentHtml += '</div>';
         }
         
         if (content) {
@@ -548,9 +554,41 @@
                         completion_tokens: msg.tokens_output,
                     };
                 }
-                this.addMessage(msg.role, msg.content, msg.image_url, msgUsage, msg.sources || null);
+                var messageImages = (msg.image_urls && msg.image_urls.length) ? msg.image_urls : msg.image_url;
+                this.addMessage(msg.role, msg.content, messageImages, msgUsage, msg.sources || null);
             }
         }
+    };
+
+    BeauBot.prototype.normalizeImages = function(imageData) {
+        if (!imageData) return [];
+        if (Array.isArray(imageData)) {
+            return imageData.filter(function(item) {
+                return typeof item === 'string' && item;
+            });
+        }
+        if (typeof imageData === 'string') {
+            var trimmed = imageData.trim();
+            if (trimmed.charAt(0) === '[') {
+                try {
+                    var parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) {
+                        return parsed.filter(function(item) {
+                            return typeof item === 'string' && item;
+                        });
+                    }
+                } catch (e) {}
+            }
+            return [imageData];
+        }
+        return [];
+    };
+
+    BeauBot.prototype.escapeAttr = function(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
     };
 
     BeauBot.prototype.handleImageSelected = function(detail) {

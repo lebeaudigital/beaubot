@@ -50,6 +50,11 @@ class BeauBot_Image {
     private const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     /**
+     * Nombre maximum d'images jointes à un message
+     */
+    public const MAX_CHAT_IMAGES = 4;
+
+    /**
      * Constructeur
      */
     public function __construct() {

@@ -3,7 +3,7 @@
  * Plugin Name: BeauBot - ChatGPT Assistant
  * Plugin URI: https://github.com/lebeaudigital/beaubot
  * Description: Un chatbot intelligent alimenté par ChatGPT qui répond aux questions sur le contenu de votre site WordPress.
- * Version: 1.7.7
+ * Version: 1.7.8
  * Author: Le Beau Digital
  * Author URI: https://lebeaudigital.com
  * License: GPL v2 or later
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes du plugin
-define('BEAUBOT_VERSION', '1.7.7');
+define('BEAUBOT_VERSION', '1.7.8');
 define('BEAUBOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('BEAUBOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BEAUBOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -187,9 +187,25 @@ class BeauBot {
         $db_version = get_option('beaubot_db_version', '0');
         if (version_compare($db_version, BEAUBOT_VERSION, '<')) {
             $this->create_tables();
+            $this->upgrade_message_image_column();
             $this->migrate_default_model();
             update_option('beaubot_db_version', BEAUBOT_VERSION);
         }
+    }
+
+    /**
+     * Élargir image_url pour stocker plusieurs URLs.
+     */
+    private function upgrade_message_image_column(): void {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'beaubot_messages';
+        $column = $wpdb->get_row("SHOW COLUMNS FROM `{$table}` LIKE 'image_url'");
+        if (!$column || stripos((string) $column->Type, 'varchar') === false) {
+            return;
+        }
+
+        $wpdb->query("ALTER TABLE `{$table}` MODIFY image_url longtext DEFAULT NULL");
     }
 
     /**
@@ -302,7 +318,7 @@ class BeauBot {
             user_id bigint(20) unsigned NOT NULL,
             role varchar(20) NOT NULL DEFAULT 'user',
             content longtext NOT NULL,
-            image_url varchar(500) DEFAULT NULL,
+            image_url longtext DEFAULT NULL,
             tokens_input int unsigned DEFAULT NULL,
             tokens_output int unsigned DEFAULT NULL,
             model varchar(50) DEFAULT NULL,

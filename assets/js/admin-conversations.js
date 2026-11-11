@@ -190,9 +190,12 @@
                                 html += '<div class="beaubot-modal-message ' + this.escapeAttr(msg.role) + '">';
                                 html += '<strong>' + (msg.role === 'user' ? 'Utilisateur' : 'BeauBot') + '</strong><br>';
                                 html += this.escapeHtml(msg.content).replace(/\n/g, '<br>');
-                                if (msg.image_url) {
-                                    html += '<br><img src="' + this.escapeAttr(msg.image_url) + '" alt="Image">';
-                                }
+                                const imageUrls = (msg.image_urls && msg.image_urls.length)
+                                    ? msg.image_urls
+                                    : this.parseImageUrls(msg.image_url);
+                                imageUrls.forEach((url) => {
+                                    html += '<br><img src="' + this.escapeAttr(url) + '" alt="Image">';
+                                });
                                 if (msg.role === 'assistant' && (msg.tokens_input || msg.tokens_output)) {
                                     html += '<div class="beaubot-tokens-info">';
                                     html += '<span class="dashicons dashicons-chart-bar"></span> ';
@@ -348,6 +351,29 @@
             const div = document.createElement('div');
             div.appendChild(document.createTextNode(text));
             return div.innerHTML;
+        },
+
+        /**
+         * Normaliser une ou plusieurs URLs d'image stockées sur un message.
+         * @param {string|string[]|null} value
+         * @returns {string[]}
+         */
+        parseImageUrls(value) {
+            if (!value) return [];
+            if (Array.isArray(value)) {
+                return value.filter((item) => typeof item === 'string' && item);
+            }
+            if (typeof value === 'string' && value.trim().charAt(0) === '[') {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (Array.isArray(parsed)) {
+                        return parsed.filter((item) => typeof item === 'string' && item);
+                    }
+                } catch (e) {
+                    return [value];
+                }
+            }
+            return [value];
         },
 
         /**

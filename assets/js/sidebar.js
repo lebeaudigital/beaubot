@@ -35,7 +35,7 @@
             if (this.toggleButton) this.toggleButton.style.transition = 'none';
             if (this.overlay) this.overlay.style.transition = 'none';
 
-            this.open();
+            this.open({ focus: false });
 
             // Réactiver les transitions après le rendu
             var self = this;
@@ -98,9 +98,10 @@
         // Preferences loading (reserved for future use)
     };
 
-    BeauBotSidebar.prototype.open = function() {
+    BeauBotSidebar.prototype.open = function(options) {
         if (!this.container) return;
 
+        options = options || {};
         this.isOpen = true;
         this.container.classList.add('beaubot-open');
         if (this.toggleButton) this.toggleButton.classList.add('beaubot-hidden');
@@ -108,9 +109,11 @@
         
         localStorage.setItem('beaubot_sidebar_open', 'true');
         
-        var input = this.container.querySelector('.beaubot-input');
-        if (input) {
-            setTimeout(function() { input.focus(); }, 300);
+        if (options.focus !== false) {
+            var input = this.container.querySelector('#beaubot-input');
+            if (input) {
+                setTimeout(function() { input.focus(); }, 300);
+            }
         }
 
         this.enableOutsideClick();
